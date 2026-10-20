@@ -20,6 +20,8 @@ for (const preset of ['qq-chat', 'qq-chat-v2']) {
     assert.equal(guard({ name }), undefined, `${preset}: expected allowed ${name}`);
   }
   for (const name of ['web_fetch', 'web_search', 'bash', 'read_file', 'dev_future_tool',
+    'mcp__phone__phone_macro', 'mcp__phone__phone_record_screen',
+    'mcp__qzone__qzone_scan', 'mcp__qzone__qzone_like', 'mcp__qzone__qzone_comment', 'mcp__qzone__qzone_status',
     'mcp__untrusted__web_fetch', '', null, undefined]) {
     try { assert.equal(typeof guard({ name }), 'string', `${preset}: must reject ${String(name)}`); }
     catch (error) { failures++; console.error(`FAIL ${error.message}`); }

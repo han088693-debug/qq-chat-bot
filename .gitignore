@@ -9,6 +9,15 @@ config.*.json
 *.key
 *.p12
 *.pfx
+*.mobileprovision
+*.p8
+.state/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*pairing*.plist
+bili_credential*
 .credentials*
 scripts/privacy-rules.json
 

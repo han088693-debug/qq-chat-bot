@@ -1,10 +1,10 @@
 # QQ Chat Bot
 
-把 QQ 私聊、群聊接入 DeepSeek Harness，让 AI 通过受限工具参与聊天。提供角色卡、仿真聊天、图片与表情、记忆与提醒，以及本地管理控制台。
+把 QQ 私聊、群聊接入 DeepSeek Harness，让 AI 通过受限工具参与聊天。提供角色卡、仿真聊天、图片与表情、记忆与提醒、本地管理控制台，以及按需安装的 iPhone、Android、QQ 空间和 B 站适配。
 
-本仓库基于 [Derpyu520/qq-bridge](https://github.com/Derpyu520/qq-bridge) `v0.2.0-r4` 的本地改造版本整理，保留原作者版权。主要增补包括日记、知识库、风格学习、图片发送、语音转写和回复间隔控制。这里只发布程序、通用模板与文档；个人配置和聊天数据由使用者在本机创建。
+桥接主体基于 [Derpyu520/qq-bridge](https://github.com/Derpyu520/qq-bridge) `v0.2.0-r4` 的改造版本；部署整合参考 [pinganbbOvO/ai-companion-kit](https://github.com/pinganbbOvO/ai-companion-kit)，可选 Android / QQ 空间服务也参考并改写其 `packages/phone-mcp`。本仓库保留来源声明，包含日记、知识库、风格学习、图片发送、语音转写和回复间隔控制等现有能力。个人配置和聊天数据由使用者在本机创建，详细来源见 [第三方说明](THIRD_PARTY_NOTICES.md)。
 
-**第一次安装，从 [中文教程](docs/QUICKSTART.md) 开始。** 想了解消息怎么流转，查看 [功能与流程](docs/ARCHITECTURE.md)；准备分享代码或日志，先看 [隐私说明](docs/guides/PRIVACY.md)。
+**第一次安装，从 [中文教程](docs/QUICKSTART.md) 开始。** 扩展能力按 [可选功能总教程](docs/OPTIONAL_FEATURES.md) 逐项配置；消息流转见 [功能与流程](docs/ARCHITECTURE.md)，分享代码或日志前看 [隐私说明](docs/guides/PRIVACY.md)。
 
 ## 能做什么
 
@@ -16,10 +16,14 @@
 | 图片与表情 | 图片发送、表情收集、备注与记忆；图像理解取决于模型 |
 | 长期信息 | 记忆、知识库、日记、提醒、黑话与成员风格学习 |
 | 可选语音 | 处理和发送已有音频；收到的语音可经本机 whisper.cpp 转写 |
+| 搜索与学习 | 联网搜索、热榜、黑话与风格学习；可配置自动运行范围 |
+| 可选外部能力 | iPhone 读取/控制、Android 读取/控制、QQ 空间读取/写入、B 站四项只读工具 |
 | 管理控制台 | 查看连接、会话、角色、工具开关、活动记录和 token 用量 |
 | 权限控制 | 白名单、会话令牌、工具限制、出站检查与受限网络抓取 |
 
 这些是程序能力，启用前仍需配置相应软件和模型。费用面板是按本地价格表计算的估算，不替代服务商账单。
+
+iPhone 依赖另装 SideTap，B 站依赖另装 Python MCP 服务；Android 依赖 ADB 和设备授权；QQ 空间依赖 SnowLuma 提供对应接口。仓库提供适配代码与教程，不包含设备配对、平台登录资料或外部软件本体。
 
 ## 消息处理流程
 
@@ -66,7 +70,7 @@ Copy-Item -LiteralPath .\config.example.json -Destination .\config.json
 node scripts/setup-dsh.mjs
 ```
 
-按教程重启 DSH、启动 SnowLuma并登录 QQ，然后在仓库运行：
+按教程重启 DSH、启动 SnowLuma 并登录 QQ，然后在仓库运行：
 
 ```powershell
 npm start
@@ -81,12 +85,26 @@ npm start
 - 开发助手默认关闭；`closed-agent` 和管理员开发助手可拥有本地工具能力，需要自己明确配置。
 - AI 发语音默认关闭，入站语音转写也默认关闭。转写需另外提供 FFmpeg、whisper.cpp 和模型，可用 `FFMPEG_PATH`、`WHISPER_CLI`、`WHISPER_MODEL` 指定路径。
 - 回复最小间隔示例设为 120 秒；主动话题和黑话自动联网研究默认关闭。
+- `optional/config.example.json` 中四类外部适配均关闭；设备控制、QQ 空间写入和截图落盘还有各自开关。
+- 黑话基础学习、风格学习、热榜等已有能力有不同默认值；“可选功能”不代表全部默认关闭。实际字段和停用边界见下方教程。
 - 新建的人格卡、音频、素材、运行数据和真实配置默认不入库。
 - 上游独立 `voice-tool` 项目的 `voice-gui.mjs` / `voice-cli.mjs` 未随本仓库提供，本仓库保留桥接内的语音共享模块与控制台操作。
 
+| 要配置的能力 | 教程 |
+| --- | --- |
+| 图片、形象、表情、音频与入站语音转写 | [媒体能力](docs/guides/OPTIONAL_MEDIA.md) |
+| 轻量记忆、知识库、日记与提醒 | [记忆和长期信息](docs/guides/OPTIONAL_MEMORY.md) |
+| 黑话、风格学习、联网搜索、热榜、主动话题与开发助手 | [学习和自动运行](docs/guides/OPTIONAL_AUTOMATION.md) |
+| iPhone | [SideTap 接入](docs/guides/OPTIONAL_IPHONE.md) |
+| Android | [ADB 接入](docs/guides/OPTIONAL_ANDROID.md) |
+| QQ 空间 | [读取和按需写入](docs/guides/OPTIONAL_QZONE.md) |
+| B 站 | [只读 MCP 接入](docs/guides/OPTIONAL_BILIBILI.md) |
+
+外部适配的安装顺序是：先运行 `node scripts/setup-dsh.mjs` 同步当前聊天预设，再填写本机 `optional/config.json`，执行 `node optional/setup.mjs --check` 和 `node optional/setup.mjs`，最后重启 DSH。`--check` 只检查配置与安装计划，不连接设备或账号。完整步骤见 [总教程](docs/OPTIONAL_FEATURES.md)。
+
 ## 当前边界
 
-逐会话模式策略尚未接入主程序，当前模式是全局设置。手机控制、QQ 空间和其他外部 MCP 不在本仓库交付范围；自定义形象图片和个人表情素材需要自行提供。消息引用和媒体获取取决于网关提供的数据。
+逐会话模式策略尚未接入主程序，当前模式是全局设置。可选适配没有替使用者完成手机配对、B 站登录或平台能力验证；`qq_phone_extend` 只保存延期状态，没有随仓库提供自动手机值班调度。自定义形象图片和个人表情素材需要自行提供，消息引用和媒体获取取决于网关提供的数据。
 
 本次发布验证以干净安装、离线模拟和源码检查为范围；没有使用个人 QQ 账号进行真实收发测试。最新记录见 [发布与验证说明](docs/RELEASE_REVIEW.md)。
 
@@ -106,6 +124,7 @@ npm run test:memory-trends
 ## 文档与许可
 
 - [安装、配置与排错教程](docs/QUICKSTART.md)
+- [全部可选功能与安装入口](docs/OPTIONAL_FEATURES.md)
 - [功能、模式与消息流程](docs/ARCHITECTURE.md)
 - [目录地图](docs/FOLDER_MAP.md)
 - [权限与运行规则](RULES.md)

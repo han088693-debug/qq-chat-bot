@@ -178,7 +178,7 @@ const SAFE_EXACT = new Set([
   'mcp__bili__bili_subtitle',
   'mcp__bili__bili_comments',
   'mcp__bili__bili_search',
-  // 手机（雷电模拟器）只放行「看 + 操作」这一层；
+  // 可选 Android 只放行「看 + 操作」这一层；
   // phone_shell 等于任意 adb shell，phone_pair/connect/devices 会改全局设备状态，故意不给。
   'mcp__phone__phone_status',
   'mcp__phone__phone_screenshot',
@@ -189,8 +189,6 @@ const SAFE_EXACT = new Set([
   'mcp__phone__phone_swipe',
   'mcp__phone__phone_key',
   'mcp__phone__phone_open_app',
-  'mcp__phone__phone_macro',
-  'mcp__phone__phone_record_screen',
   // iPhone（SideTap / WebDriverAgent）。只放行「看 + 操作」；
   // 故意不放行：act（批量调用等于绕过白名单）、send_message/send_image（自带人工审批闸门）、
   // read_messages/get_clipboard/set_clipboard/save_clipboard_image（隐私边界）、unlock（要明文锁屏密码）。
@@ -222,7 +220,8 @@ const SAFE_EXACT = new Set([
   // 所以不在「看 + 操作」那一类里，单独列。只给收发说说所需的最小集合：
   //   读：好友动态 / 自己的说说 / 指定人的说说
   //   写：发说说 / 点赞 / 评论；删除与拉黑**故意不给**
-  // 频率上限由 phone-mcp 自己扣（发说说 1/分、8/天；评论 1/10 分、3/天）。
+  // optional/phone 按进程计数：发帖与点赞共用 1/分、滚动 24 小时 8 次；
+  // 评论 1/10 分、滚动 24 小时 3 次。重启后重置，不是账号持久配额。
   'mcp__phone__qzone_post',
   'mcp__phone__qzone_my_posts',
   'mcp__phone__qzone_feeds',
@@ -230,12 +229,6 @@ const SAFE_EXACT = new Set([
   'mcp__phone__qzone_like',
   'mcp__phone__qzone_recent_like',
   'mcp__phone__qzone_comment',
-  // QQ 空间巡逻（qzone-sweeper 移植版 MCP，2026-10-20）：只读扫描 + 带硬上限的点赞/评论。
-  // 配额在 MCP 内部扣（赞 8/天、评 3/天、每小时 6 动作、60 分钟冷却、01:00-08:00 免打扰）。
-  'mcp__qzone__qzone_scan',
-  'mcp__qzone__qzone_like',
-  'mcp__qzone__qzone_comment',
-  'mcp__qzone__qzone_status',
 ])
 
 export function apply(ctx) {

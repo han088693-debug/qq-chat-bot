@@ -152,15 +152,13 @@ test('写回沿用文件主导行尾，且不吞掉块尾空行', () => {
 
 test('只含空格/Tab 的行也能安全往返（不会被当成空行读丢）', () => {
   const spaced = [
-    ...originalPrefix.split('\n').slice(0, 4),
+    ...originalPrefix.split('\n'),
     '   ',
     '\t',
     ' 带前后空格的正文 ',
     '正常一行',
   ].join('\n');
-  // 前 4 行来自原文，因此安全不变量仍然齐全
-  // （折叠标量把「安全规则」和「工具协议」两段各折成一行；只取 3 行时，
-  //   一旦预设里多插一个空行分段，「不会自动发送到 QQ」就会被挤出样本。）
+  // 保留完整安全基线，新增段落不应使空白字符测试丢失必要规则。
   const next = renderPresetPromptYaml(source, spaced);
   assert.equal(extractPresetPrefix(next), spaced, '空白行必须原样保留');
 });

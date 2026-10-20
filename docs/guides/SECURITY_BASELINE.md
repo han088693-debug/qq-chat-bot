@@ -18,6 +18,8 @@
 | `socialV2.asr.enabled` | `false`；准备本地转写程序与模型后再启用 |
 | `slang.autoResearch` | `false` |
 | `social.proactiveEnabled` / `socialV2.proactive.enabled` | `false`；按需开启主动发言 |
+| `optional/config.json` 的各模块 `enabled` | 模板均为 `false`，按分项教程准备依赖后开启 |
+| 设备 `allowControl` / QQ 空间 `allowWrites` / iPhone `saveScreenshots` | 模板均为 `false`，分别决定是否开放操作、写入与本地截图保存 |
 
 功能关闭和未填白名单不代表软件完全不联网。DSH 连接、模型请求、已启用的搜索或热榜等功能有各自的访问路径；具体数据流见 [隐私说明](PRIVACY.md)。
 
@@ -27,7 +29,7 @@
 
 普通 QQ 聊天缺少专用预设时，预期行为是拒绝建会话；不要改成自动退回包含完整本地工具的默认预设。
 
-当前工具约束同时使用注册期隐藏和执行期允许列表。额外 MCP 服务可能带来新能力，尤其是源码中兼容的手机、iPhone、QQ 空间等工具；安装脚本并不提供这些外部服务，也无法替它们完成权限配置。新增服务后应查看真实工具清单及其副作用。
+当前工具约束同时使用注册期隐藏和执行期允许列表。`optional/` 为手机、QQ 空间和 B 站提供额外适配，必须在主安装之后单独配置安装。它不会替使用者安装外部软件、登录或配对；启用后应查看真实工具清单及其副作用。独立 MCP 不自动继承 QQ 白名单的逐会话边界，控制开关也不等于逐用户授权，详见 [总教程](../OPTIONAL_FEATURES.md)。
 
 ## 管理入口和状态文件
 

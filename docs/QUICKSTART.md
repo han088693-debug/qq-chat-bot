@@ -66,7 +66,7 @@ Copy-Item -LiteralPath .\config.example.json -Destination .\config.json
 
 **首次检查时，让两个白名单数组都保持为空。** 先完成后面的启动和检查，再在控制台「访问与安全」加入你决定开放的对象。空白模板不会包含任何人的真实 QQ 号或群号。
 
-模板关闭了开发助手、语音收发中的可选能力、主动发言和黑话自动研究。先保持模板设置；需要时按第 8 节逐项开启。
+模板关闭了开发助手、语音收发中的可选能力、主动发言和黑话自动研究。黑话基础学习、风格学习和热榜有不同默认值，不能据此推断全部可选功能都关闭。先保持基础聊天设置；需要时按第 8 节与 [可选功能总教程](OPTIONAL_FEATURES.md) 逐项配置。
 
 ### DSH 的本机鉴权
 
@@ -196,6 +196,8 @@ node src/self-test.js http://127.0.0.1:3080
 
 ### 图片、表情与语音
 
+配置片段、素材目录、形象文件与音频检查步骤见 [媒体教程](guides/OPTIONAL_MEDIA.md)。
+
 - 图片理解依赖模型本身的图像输入能力；图片下载和发送还受到大小、来源及目录限制。
 - 表情库依赖 SnowLuma 提供相关接口和可读取的表情资源。
 - 发送语音使用你自己准备的音频，需要配置音频目录以及必要的 FFmpeg/ffprobe 工具；启用 AI 语音发送时，同时检查 `socialV2.voice.enabled` 与 `socialV2.tools.sendVoice`。
@@ -204,11 +206,23 @@ node src/self-test.js http://127.0.0.1:3080
 
 ### 搜索、记忆与费用
 
-黑话词库、记忆、知识库、日记和提醒均有代码支持；具体入口和依赖见 [功能与流程说明](ARCHITECTURE.md)。开启自动研究或联网搜索会产生外部请求，搜索内容可能交给配置的服务商处理。
+黑话词库、记忆、知识库、日记和提醒均有代码支持；实际工具和停用边界见 [记忆教程](guides/OPTIONAL_MEMORY.md) 与 [学习和自动运行](guides/OPTIONAL_AUTOMATION.md)。开启自动研究或联网搜索会产生外部请求，搜索内容可能交给配置的服务商处理。
 
 「令牌与花费」展示 DSH 提供的用量和按本地价格表计算的估算金额。价格表可能需要更新，账单以实际服务商为准。
 
 开发助手 `devAgent` 与 `closed-agent` 模式可以使用更广的 DSH 工具面。首次聊天配置保持开发助手关闭、使用 `reserved2`；确实需要开发助手时，单独设置其工作目录、预设和管理员身份。
+
+### iPhone、Android、QQ 空间和 B 站
+
+仓库 `optional/` 提供这些能力的可选适配，模板全部关闭，外部软件和平台登录需另行准备。按 [可选功能总教程](OPTIONAL_FEATURES.md) 复制独立配置，先同步当前聊天预设，再安装可选 MCP：
+
+```powershell
+node scripts/setup-dsh.mjs web
+node optional/setup.mjs web --check
+node optional/setup.mjs web
+```
+
+上述可选安装命令需要先完成 `optional/config.json`，不会替你连接手机或登录账号。最后重启 DSH，并检查真实工具列表。设备控制、QQ 空间写入和截图保存各有显式开关；B 站代理只开放四个读取工具。
 
 ## 9. 常见问题
 

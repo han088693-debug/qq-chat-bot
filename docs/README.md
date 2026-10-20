@@ -5,6 +5,14 @@
 | 你要做什么 | 对应文档 |
 | --- | --- |
 | 安装、启动和排错 | [QUICKSTART.md](QUICKSTART.md) |
+| 按需配置全部已有扩展能力 | [OPTIONAL_FEATURES.md](OPTIONAL_FEATURES.md) |
+| 图片、表情、形象、语音发送和语音转写 | [OPTIONAL_MEDIA.md](guides/OPTIONAL_MEDIA.md) |
+| 记忆、知识库、日记和提醒 | [OPTIONAL_MEMORY.md](guides/OPTIONAL_MEMORY.md) |
+| 黑话、风格、搜索、热榜、主动话题和开发助手 | [OPTIONAL_AUTOMATION.md](guides/OPTIONAL_AUTOMATION.md) |
+| iPhone 读取与按需控制 | [OPTIONAL_IPHONE.md](guides/OPTIONAL_IPHONE.md) |
+| Android 读取与按需控制 | [OPTIONAL_ANDROID.md](guides/OPTIONAL_ANDROID.md) |
+| QQ 空间读取与按需写入 | [OPTIONAL_QZONE.md](guides/OPTIONAL_QZONE.md) |
+| B 站四项只读工具 | [OPTIONAL_BILIBILI.md](guides/OPTIONAL_BILIBILI.md) |
 | 了解消息流程、功能和未完成部分 | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | 按职责定位源码与本机数据 | [FOLDER_MAP.md](FOLDER_MAP.md) |
 | 理解运行模式、管理员和工具权限 | [RULES.md](../RULES.md) |
@@ -12,7 +20,8 @@
 | 检查部署配置与能力范围 | [SECURITY_BASELINE.md](guides/SECURITY_BASELINE.md) |
 | 检查提交内容、日志及隐私扫描盲区 | [PRIVACY.md](guides/PRIVACY.md) |
 | 创建或维护角色卡 | [roles/README.md](../roles/README.md) |
+| 查阅来源与第三方许可 | [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) |
 
-桥接内的图片、表情、语音和 ASR 使用说明见 [教程的常用功能](QUICKSTART.md#8-常用功能)。独立 `../voice-tool/` 的 `voice-gui.mjs`、`voice-cli.mjs` 属于仓库外项目，没有随本仓库打包；不要把缺少该项目解释为桥接内的所有语音能力都不可用。
+独立 `../voice-tool/` 的 `voice-gui.mjs`、`voice-cli.mjs` 属于仓库外项目，没有随本仓库打包；桥接内的语音处理和控制台入口见媒体教程。`optional/` 则是本仓库提供的外部能力适配，使用自己的配置文件，安装方法见可选功能总教程。
 
 文档区分源码已有能力、外部依赖和未接线功能。命令示例是供使用者执行的步骤，不表示其电脑已验证成功。历史个人配置、私密工作文档与聊天日志不作为发布文档提供。

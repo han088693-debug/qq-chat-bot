@@ -12,9 +12,11 @@
 | `plugins/qq-agent-presets/` | DSH 预设 bundle、生成的 patch 和工具约束实现 |
 | `plugins/qq-mode-console/` | DSH 模式设置插件 |
 | `scripts/` | 安装、检查、回归、探针及手动操作脚本 |
+| `optional/` | iPhone、Android、QQ 空间、B 站的独立配置、MCP 适配与安装器 |
 | `roles/` | 通用角色示例与角色编写说明；个人新增角色默认忽略 |
 | `docs/` | 安装、架构、维护和隐私说明 |
 | `config.example.json` | 无真实账号和凭据的配置模板 |
+| `optional/config.example.json` | 外部可选模块模板；模块、设备控制、平台写入及截图落盘默认关闭 |
 | `package.json` / `package-lock.json` | 命令入口、依赖声明与锁定版本 |
 | `.gitignore` | 排除本机配置、运行状态、依赖、私密素材等 |
 | `RULES.md` | 模式与权限规则 |
@@ -73,6 +75,19 @@
 | `scripts/send-voice.mjs` / `scripts/send-test-group.mjs` | 手动发送入口，可能向真实 QQ 发送内容 |
 | `scripts/voice-tool-locator.mjs` | 查找未打包的外部独立语音工具，缺少时报告相应检查跳过 |
 
+## 可选模块
+
+可选模块的职责如下；操作步骤见 [可选功能总教程](OPTIONAL_FEATURES.md)。
+
+| 文件 | 职责 |
+| --- | --- |
+| `optional/config.mjs` | 读取独立 JSON，校验开关、路径、设备选择和回环地址 |
+| `optional/setup.mjs` | 检查/安装/移除自管的 DSH MCP 条目，支持 `--check` 与 `--remove` |
+| `optional/proxy.mjs` | iPhone / B 站的工具注册与调用过滤；可选私有截图保存 |
+| `optional/phone/server.mjs` | Android / QQ 空间 MCP stdio 入口 |
+| `optional/phone/core.mjs` | 具体设备读取、控制及 QQ 空间访问实现 |
+| `optional/phone/LICENSE.ai-companion-kit` | 改写来源的 MIT 许可 |
+
 ## 本机运行时目录
 
 以下内容由使用者在本机创建或由程序生成，不应与源代码一起发布：
@@ -80,11 +95,13 @@
 | 路径 | 典型内容 |
 | --- | --- |
 | `config.json` | 真实 QQ 号、白名单、端点、令牌及本机路径 |
+| `optional/config.json` | 真实设备选择、外部软件位置与可选服务设置 |
 | `state/` | 会话映射、会话令牌、控制台令牌、聊天活动、记忆、词库、日记、提醒及用量 |
 | `audio/`、自定义图片目录 | 用户自己的音频和图片 |
 | `node_modules/` | 安装的依赖；通过 `npm ci` 重建 |
 | 使用者自己的 `DSH_HOME` | DSH profile、凭据与会话记录 |
 | SnowLuma 自己的安装和数据目录 | QQ 网关、登录资料、日志及资源 |
 | 仓库外的 `../voice-tool/` | 可选独立语音项目，含 `voice-gui.mjs` 和 `voice-cli.mjs` |
+| 外部 SideTap / B 站服务目录 | 运行环境、设备配对、账号凭据与日志 |
 
 停止进程、清理日志、重置聊天会话和删除运行状态是不同操作。诊断时先保留需要的本机证据，避免用删除整个 `state/` 的方式尝试解决所有问题。

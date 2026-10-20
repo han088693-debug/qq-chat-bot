@@ -51,4 +51,16 @@ dsh plugin --profile web install
 
 修改预设源文件、移动仓库或重新克隆到另一目录后，再运行安装脚本并重启 DSH。它不启动 QQ 或 SnowLuma，也不安装模型凭据、外部语音工具、手机服务或其他第三方 MCP。
 
+## 可选 MCP 的安装顺序
+
+主安装更新聊天预设及基础服务；外部模块使用另一个安装器。在本机 `optional/config.json` 配好依赖与开关后执行：
+
+```powershell
+node scripts/setup-dsh.mjs web
+node optional/setup.mjs web --check
+node optional/setup.mjs web
+```
+
+使用其他 profile 时同步替换三处名称，再重启 DSH。可选安装器只维护自己的 `mcp-qq-optional-*` 项，不安装 SideTap、ADB、Python 服务或平台账号；冲突、移除与分项教程见 [可选功能总教程](../OPTIONAL_FEATURES.md)。
+
 本机鉴权通常保持 `dsh.authToken` 为空，由 `src/dsh-client.js` 使用本机 DSH 凭据建立会话。401、预设缺失和模式回滚的排查步骤见 [教程的常见问题](../QUICKSTART.md#9-常见问题)。
