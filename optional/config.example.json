@@ -1,0 +1,57 @@
+{
+  "iphone": {
+    "enabled": false,
+    "pythonPath": "",
+    "appDir": "",
+    "allowControl": false,
+    "saveScreenshots": false
+  },
+  "phone": {
+    "android": {
+      "enabled": false,
+      "adbPath": "adb",
+      "serial": "",
+      "allowControl": false
+    },
+    "qzone": {
+      "enabled": false,
+      "baseUrl": "http://127.0.0.1:3000",
+      "accessTokenEnv": "SNOWLUMA_ACCESS_TOKEN",
+      "allowWrites": false,
+      "imageDirs": []
+    }
+  },
+  "qzonePatrol": {
+    "enabled": false,
+    "dryRun": true,
+    "allowLikes": false,
+    "allowComments": false,
+    "allowedUsers": [],
+    "blockedUsers": [],
+    "baseUrl": "http://127.0.0.1:3000",
+    "accessTokenEnv": "SNOWLUMA_ACCESS_TOKEN",
+    "dailyLikeLimit": 8,
+    "dailyCommentLimit": 3,
+    "hourlyLimit": 6,
+    "cooldownMinutes": 60,
+    "scanPageSize": 12,
+    "maxPostAgeHours": 72,
+    "quietHours": {
+      "start": "01:00",
+      "end": "08:00",
+      "timeZone": "Asia/Shanghai"
+    },
+    "runner": {
+      "enabled": false,
+      "intervalMinutes": 30,
+      "autoLike": false
+    }
+  },
+  "bilibili": {
+    "enabled": false,
+    "command": "",
+    "args": [],
+    "cwd": "",
+    "env": {}
+  }
+}
