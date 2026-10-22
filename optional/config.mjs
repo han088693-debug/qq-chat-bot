@@ -28,13 +28,15 @@ export function validateConfig(config) {
   object(config.qzonePatrol, 'qzonePatrol');
   object(config.qzonePatrol.quietHours, 'qzonePatrol.quietHours');
   object(config.qzonePatrol.runner, 'qzonePatrol.runner');
+  object(config.qzonePatrol.watcher, 'qzonePatrol.watcher');
   object(config.bilibili, 'bilibili');
   for (const [name, section, flags] of [
     ['iphone', config.iphone, ['enabled', 'allowControl', 'saveScreenshots']],
     ['phone.android', config.phone.android, ['enabled', 'allowControl']],
     ['phone.qzone', config.phone.qzone, ['enabled', 'allowWrites']],
-    ['qzonePatrol', config.qzonePatrol, ['enabled', 'dryRun', 'allowLikes', 'allowComments']],
+    ['qzonePatrol', config.qzonePatrol, ['enabled', 'dryRun', 'allowLikes', 'allowComments', 'allowReplies', 'allowPosts']],
     ['qzonePatrol.runner', config.qzonePatrol.runner, ['enabled', 'autoLike']],
+    ['qzonePatrol.watcher', config.qzonePatrol.watcher, ['enabled', 'dryRun']],
     ['bilibili', config.bilibili, ['enabled']],
   ]) for (const key of flags) flag(section, key, name);
 
@@ -57,13 +59,32 @@ export function validateConfig(config) {
   for (const [key, min, max] of [
     ['dailyLikeLimit', 0, 200], ['dailyCommentLimit', 0, 50], ['hourlyLimit', 0, 100],
     ['cooldownMinutes', 0, 1440], ['scanPageSize', 1, 50], ['maxPostAgeHours', 1, 720],
+    ['dailyReplyLimit', 0, 100], ['replyPerPostLimit', 0, 20], ['replyPerPersonLimit', 0, 10],
+    ['replyMinGapSeconds', 60, 86400], ['dailyPostLimit', 0, 200], ['postPerMinuteLimit', 0, 3],
+    ['imageMaxBytes', 1, 8 * 1024 * 1024],
   ]) {
     if (!Number.isSafeInteger(patrol[key]) || patrol[key] < min || patrol[key] > max) {
       throw new Error(`qzonePatrol.${key} must be an integer from ${min} to ${max}`);
     }
   }
+  if (!Array.isArray(patrol.imageDirs) || patrol.imageDirs.some(p => typeof p !== 'string' || !path.isAbsolute(p))) {
+    throw new Error('qzonePatrol.imageDirs must contain absolute directory paths');
+  }
   if (!Number.isSafeInteger(patrol.runner.intervalMinutes) || patrol.runner.intervalMinutes < 5 || patrol.runner.intervalMinutes > 1440) {
     throw new Error('qzonePatrol.runner.intervalMinutes must be an integer from 5 to 1440');
+  }
+  const watcher = patrol.watcher;
+  if (!Number.isSafeInteger(watcher.intervalMinutes) || watcher.intervalMinutes < 5 || watcher.intervalMinutes > 1440
+      || typeof watcher.dailyAt !== 'string' || (watcher.dailyAt && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(watcher.dailyAt))
+      || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(watcher.bridgeTokenEnv ?? '')
+      || typeof watcher.sessionKey !== 'string'
+      || (watcher.sessionKey && (!/^private:[1-9]\d{0,15}$/.test(watcher.sessionKey)
+        || !Number.isSafeInteger(Number(watcher.sessionKey.slice(8)))))
+      || (watcher.enabled && !watcher.sessionKey)) throw new Error('qzonePatrol.watcher settings are invalid');
+  const bridgeUrl = new URL(watcher.bridgeUrl);
+  if (!['http:', 'https:'].includes(bridgeUrl.protocol) || !['127.0.0.1', 'localhost', '[::1]'].includes(bridgeUrl.hostname)
+      || bridgeUrl.username || bridgeUrl.password || bridgeUrl.search || bridgeUrl.hash || bridgeUrl.pathname !== '/') {
+    throw new Error('qzonePatrol.watcher.bridgeUrl must be a local HTTP origin');
   }
   for (const key of ['start', 'end']) {
     if (typeof patrol.quietHours[key] !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(patrol.quietHours[key])) {
@@ -122,7 +143,7 @@ export function loadConfig(file = CONFIG_PATH) {
   object(input, 'config');
   for (const name of ['iphone', 'phone', 'bilibili', 'qzonePatrol']) if (Object.hasOwn(input, name)) object(input[name], name);
   for (const name of ['android', 'qzone']) if (Object.hasOwn(input.phone || {}, name)) object(input.phone[name], `phone.${name}`);
-  for (const name of ['quietHours', 'runner']) if (Object.hasOwn(input.qzonePatrol || {}, name)) object(input.qzonePatrol[name], `qzonePatrol.${name}`);
+  for (const name of ['quietHours', 'runner', 'watcher']) if (Object.hasOwn(input.qzonePatrol || {}, name)) object(input.qzonePatrol[name], `qzonePatrol.${name}`);
   return validateConfig({
     iphone: { ...defaults.iphone, ...input.iphone },
     phone: {
@@ -134,6 +155,7 @@ export function loadConfig(file = CONFIG_PATH) {
       ...defaults.qzonePatrol, ...input.qzonePatrol,
       quietHours: { ...defaults.qzonePatrol.quietHours, ...input.qzonePatrol?.quietHours },
       runner: { ...defaults.qzonePatrol.runner, ...input.qzonePatrol?.runner },
+      watcher: { ...defaults.qzonePatrol.watcher, ...input.qzonePatrol?.watcher },
     },
   });
 }

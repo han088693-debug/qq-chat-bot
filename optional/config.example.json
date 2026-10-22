@@ -26,6 +26,16 @@
     "dryRun": true,
     "allowLikes": false,
     "allowComments": false,
+    "allowReplies": false,
+    "allowPosts": false,
+    "dailyReplyLimit": 10,
+    "replyPerPostLimit": 3,
+    "replyPerPersonLimit": 1,
+    "replyMinGapSeconds": 60,
+    "dailyPostLimit": 20,
+    "postPerMinuteLimit": 3,
+    "imageDirs": [],
+    "imageMaxBytes": 8388608,
     "allowedUsers": [],
     "blockedUsers": [],
     "baseUrl": "http://127.0.0.1:3000",
@@ -45,6 +55,15 @@
       "enabled": false,
       "intervalMinutes": 30,
       "autoLike": false
+    },
+    "watcher": {
+      "enabled": false,
+      "dryRun": true,
+      "intervalMinutes": 10,
+      "dailyAt": "21:00",
+      "bridgeUrl": "http://127.0.0.1:3100",
+      "bridgeTokenEnv": "QQ_BRIDGE_CONSOLE_TOKEN",
+      "sessionKey": ""
     }
   },
   "bilibili": {
