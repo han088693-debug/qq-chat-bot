@@ -1,5 +1,9 @@
 # 可选 QQ 空间模块
 
+**本页保留 `phone.qzone` 兼容入口。新部署推荐 [空间扩展与巡逻](OPTIONAL_QZONE_PATROL.md) 的 `qzonePatrol` / `mcp__qzone__*`。** 新入口提供 9 个工具，增加自己的说说与评论读取、精准楼中楼回复、发帖，以及持久配额与去重；另有默认关闭的评论守望者。按需使用时不必启动巡逻或守望者。
+
+两套入口的开关和额度互相独立。需要统一限制空间互动时，保持本页 `phone.qzone` 关闭或至少 `allowWrites=false`，只启用新入口需要的能力。原有 phone 工具名称保留兼容；不要同时加载另一个同名 `phone` 或 `qzone` MCP 服务。
+
 这个模块通过本机 SnowLuma 的 HTTP API 读取动态、发布说说、点赞和评论。它不需要 Android、iPhone 或 ADB，也不读取或保存 QQ Cookie。默认关闭；启用后默认只提供读取工具。
 
 代码位于 `optional/phone/`，MCP 名称为 `phone`。Android 与 QQ 空间共用这个 MCP 进程，但分别开关。
@@ -107,11 +111,11 @@ node optional/setup.mjs web
 
 ## 6. 与定时巡逻的区别
 
-本页的 `phone.qzone` 提供按需读取与写入；定时巡逻使用本仓库独立实现的 `optional/qzone-patrol/`、`qzonePatrol` 配置和 `qzone` MCP，见 [巡逻配置与使用教程](OPTIONAL_QZONE_PATROL.md)。
+本页的 `phone.qzone` 提供按需读取与写入；推荐的新入口使用本仓库独立实现的 `optional/qzone-patrol/`、`qzonePatrol` 配置和 `qzone` MCP，同时提供 9 个按需工具及可单独启动的定时巡逻，见 [空间扩展配置与使用教程](OPTIONAL_QZONE_PATROL.md)。精准回复采用新入口读取评论时生成的候选 ID，不接受模型自行拼接评论账号和标识。
 
 两套模块独立开关、独立限频。巡逻的允许名单、持久配额和去重不会覆盖本页的 `phone.qzone` 写工具；需要统一限制空间互动时，应保持 `phone.qzone.allowWrites=false`，只启用巡逻允许的动作。安装模块本身不会启动定时巡逻，也不会自动点赞或评论。
 
-旧部署可能另装 `qzone-sweeper` 并占用 `serverName=qzone`。新模块没有导入其代码、词库、私人配置或状态，也不兼容其配置与历史格式。先在自己的 DSH profile 中处理服务名称冲突；不要把旧插件的定时任务或个人状态直接复制进来。
+旧部署可能另装 `qzone-sweeper` 并占用 `serverName=qzone`。公开仓库不附带旧部署的词库、私人配置或运行状态，两者的配置与历史格式也不通用。先在自己的 DSH profile 中处理服务名称冲突；不要把旧插件的定时任务或个人状态直接复制进来。
 
 ## 7. 排障与关闭
 

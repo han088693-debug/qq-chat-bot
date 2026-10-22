@@ -20,7 +20,8 @@
 | `social.proactiveEnabled` / `socialV2.proactive.enabled` | `false`；按需开启主动发言 |
 | `optional/config.json` 的各模块 `enabled` | 模板均为 `false`，按分项教程准备依赖后开启 |
 | 设备 `allowControl` / QQ 空间 `allowWrites` / iPhone `saveScreenshots` | 模板均为 `false`，分别决定是否开放操作、写入与本地截图保存 |
-| `qzonePatrol.enabled` / `runner.enabled` / `runner.autoLike` / `allowLikes` / `allowComments` | 模板均为 `false`；巡逻允许名单为空，`dryRun=true` |
+| `qzonePatrol.enabled` / `runner.enabled` / `runner.autoLike` / `allowLikes` / `allowComments` / `allowReplies` / `allowPosts` | 模板均为 `false`；空间允许名单为空，`dryRun=true` |
+| `qzonePatrol.watcher.enabled` | `false`；独立 `dryRun=true`、`sessionKey=""`，配置后仍需单独启动 |
 
 功能关闭和未填白名单不代表软件完全不联网。DSH 连接、模型请求、已启用的搜索或热榜等功能有各自的访问路径；具体数据流见 [隐私说明](PRIVACY.md)。
 
@@ -32,7 +33,9 @@
 
 当前工具约束同时使用注册期隐藏和执行期允许列表。`optional/` 为手机、QQ 空间和 B 站提供额外适配，必须在主安装之后单独配置安装。它不会替使用者安装外部软件、登录或配对；启用后应查看真实工具清单及其副作用。独立 MCP 不自动继承 QQ 白名单的逐会话边界，控制开关也不等于逐用户授权，详见 [总教程](../OPTIONAL_FEATURES.md)。
 
-巡逻只扫描自己的允许名单，空名单不放行。真实互动前要求近期候选并持久预占动作；结果未明的请求不会自动重试。需要收紧空间写入时，同时检查 `phone.qzone.allowWrites` 和 `qzonePatrol`，不能用其中一套限制推断另一套也被限制。完整操作步骤见 [巡逻教程](OPTIONAL_QZONE_PATROL.md)。
+巡逻和指定账号读取受空间允许名单约束，空名单不放行他人目标；自己的说说另有读取入口。点赞、评论和精准回复要求近期候选，发帖使用独立开关和内容防重；所有真实写操作先持久预占，结果未明不会自动重试。需要收紧空间写入时，同时检查 `phone.qzone.allowWrites` 和 `qzonePatrol`，不能用其中一套限制推断另一套也被限制。完整操作步骤见 [巡逻教程](OPTIONAL_QZONE_PATROL.md)。
+
+守望者只向显式配置、被桥接许可的私聊会话投递提醒，要求二代模式且 DSH 就绪；首次真实扫描仅建立历史基线。它与自动点赞运行器独立，安装 MCP 不会启动二者，也不创建系统定时任务。停止守望者只停止新提醒，已有提醒要在 Bridge 中检查；立即禁止其后续回复应同时关闭 `allowReplies` 或整个空间模块。
 
 ## 管理入口和状态文件
 

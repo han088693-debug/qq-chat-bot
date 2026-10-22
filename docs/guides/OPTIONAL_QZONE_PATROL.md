@@ -1,12 +1,12 @@
-# QQ 空间定时巡逻：配置与使用
+# QQ 空间工具、定时巡逻与评论守望者
 
-巡逻模块按你填写的允许名单定时读取近期空间动态，可在单独授权后自动点赞。它还向 DSH 提供扫描、状态、点赞和评论四类 MCP 工具。**默认关闭，不随 `npm start` 或 MCP 安装自动启动。** 定时进程不生成或发布自动评论；评论需在已授权的任务中通过 MCP 调用。
+空间模块提供五个读取工具及四个独立授权的写工具：点赞、一级评论、精准回复、发说说。巡逻进程按允许名单扫描，可单独开启自动点赞；评论守望者扫描自己的评论，并向明确配置的桥接私聊会话建立提醒。**各模块默认关闭，定时进程不随 `npm start` 或 MCP 安装自动启动。** 守望者本身不发评论；被提醒的会话仍须通过现有授权和精准回复检查。
 
 本模块位于 `optional/qzone-patrol/`，配置在本机 `optional/config.json` 的 `qzonePatrol`，MCP 名称为 `qzone`。它独立于 [按需空间工具](OPTIONAL_QZONE.md) 的 `phone.qzone`，两者的开关、限频和目标限制分别生效。要让空间互动只经过巡逻限制，可保持 `phone.qzone.enabled=false`，或至少保持 `phone.qzone.allowWrites=false`。
 
 ## 1. 准备与默认值
 
-需要 Node.js 与已安装的项目依赖，以及已经手动登录 QQ 的 SnowLuma。本模块不依赖手机、ADB 或 Cookie 文件；网关必须提供 `get_login_info`、`get_qzone_msg_list`，真实互动还需要 `like_qzone` 或 `comment_qzone`。普通 OneBot v11 服务不一定实现这些空间接口。
+需要 Node.js 与项目依赖，以及已经手动登录 QQ 的 SnowLuma。模块不依赖手机、ADB 或 Cookie 文件；读取需要 `get_login_info`、`get_qzone_msg_list`、`get_qzone_msg_detail`。点赞、一级评论、发说说分别需要 `like_qzone`、`comment_qzone`、`send_qzone_msg`。精准回复通过 `get_cookies` 临时取得当前账号的空间凭据，再访问固定的 QQ 空间回复接口；凭据不落盘、不展示。普通 OneBot v11 服务不一定实现这些接口。
 
 先完成 [基础安装](../QUICKSTART.md)。在仓库根目录准备本机配置；已有配置不要覆盖：
 
@@ -27,6 +27,16 @@ if (!(Test-Path -LiteralPath .\optional\config.json)) {
     "dryRun": true,
     "allowLikes": false,
     "allowComments": false,
+    "allowReplies": false,
+    "allowPosts": false,
+    "dailyReplyLimit": 10,
+    "replyPerPostLimit": 3,
+    "replyPerPersonLimit": 1,
+    "replyMinGapSeconds": 60,
+    "dailyPostLimit": 20,
+    "postPerMinuteLimit": 3,
+    "imageDirs": [],
+    "imageMaxBytes": 8388608,
     "allowedUsers": [],
     "blockedUsers": [],
     "dailyLikeLimit": 8,
@@ -44,6 +54,15 @@ if (!(Test-Path -LiteralPath .\optional\config.json)) {
       "enabled": false,
       "intervalMinutes": 30,
       "autoLike": false
+    },
+    "watcher": {
+      "enabled": false,
+      "dryRun": true,
+      "intervalMinutes": 10,
+      "dailyAt": "21:00",
+      "bridgeUrl": "http://127.0.0.1:3100",
+      "bridgeTokenEnv": "QQ_BRIDGE_CONSOLE_TOKEN",
+      "sessionKey": ""
     }
   }
 }
@@ -56,13 +75,18 @@ if (!(Test-Path -LiteralPath .\optional\config.json)) {
 | `enabled` | `false`；巡逻扫描及互动的总开关 |
 | `baseUrl` | `http://127.0.0.1:3000`；SnowLuma 的 HTTP API 根地址，需按本机实际端口修改 |
 | `accessTokenEnv` | `SNOWLUMA_ACCESS_TOKEN`；填写环境变量名称，不能填令牌本身 |
-| `dryRun` | `true`；互动只演练，返回 `performed:false`，不提交点赞或评论 |
-| `allowLikes` / `allowComments` | 均为 `false`；分别允许巡逻点赞或评论，演练也需要相应开关 |
-| `allowedUsers` | `[]`；可扫描和互动的 QQ 账号字符串数组；空数组表示不允许任何目标 |
+| `dryRun` | `true`；所有空间写入只演练，返回 `performed:false`；守望者也不投递提醒 |
+| `allowLikes` / `allowComments` / `allowReplies` / `allowPosts` | 均为 `false`；分别开启点赞、一级评论、精准回复、发说说；演练也需要对应开关 |
+| `allowedUsers` | `[]`；可读取和互动的其他账号；空数组拒绝所有外部目标。自己的说说/评论可独立读取，但只有名单内评论者可成为回复候选 |
 | `blockedUsers` | `[]`；屏蔽优先，即使账号也在允许名单中仍拒绝 |
 | `dailyLikeLimit` | `8`，允许 `0..200`；按配置时区的自然日统计点赞 |
 | `dailyCommentLimit` | `3`，允许 `0..50`；按配置时区的自然日统计评论 |
-| `hourlyLimit` | `6`，允许 `0..100`；点赞和评论合计的最近一小时上限 |
+| `dailyReplyLimit` / `dailyPostLimit` | `10` / `20`；按配置时区自然日统计，包含预占和未知结果 |
+| `replyPerPostLimit` / `replyPerPersonLimit` | `3` / `1`；同一说说的回复数，以及同一人在同一说说下的回复数 |
+| `replyMinGapSeconds` | `60`，不能低于 60；精准回复间隔，仍同时受全局冷却限制 |
+| `postPerMinuteLimit` | `3`，允许 `0..3`；发说说最近一分钟上限 |
+| `imageDirs` / `imageMaxBytes` | `[]` / `8388608`；明确允许的本地绝对目录与单张图片字节上限，最多 8 MiB |
+| `hourlyLimit` | `6`，允许 `0..100`；四类空间写入合计的最近一小时上限 |
 | `cooldownMinutes` | `60`，允许 `0..1440`；任何两次真实互动预占之间的最小间隔 |
 | `scanPageSize` | `12`，允许 `1..50`；本轮合并后最多保留的候选数；每个账号最多读取 `min(3, scanPageSize)` 条 |
 | `maxPostAgeHours` | `72`，允许 `1..720`；只接受这一时长内的动态 |
@@ -71,6 +95,7 @@ if (!(Test-Path -LiteralPath .\optional\config.json)) {
 | `runner.enabled` | `false`；独立定时进程开关；常驻运行和 `--once` 都要求它与顶层 `enabled` 为 `true` |
 | `runner.intervalMinutes` | `30`，允许 `5..1440`；两轮间的等待分钟数 |
 | `runner.autoLike` | `false`；对本轮候选尝试点赞；同时受 `allowLikes`、`dryRun`、配额及其他检查限制 |
+| `watcher.enabled` / `watcher.dryRun` | `false` / `true`；评论提醒进程独立开关及投递演练，详见第 10 节 |
 
 账号应作为字符串填写，只接受无前导零的正整数字符串，且必须能安全表示为整数。请在本机配置中填真实目标，不把名单放进示例、角色卡或 Git 提交。
 
@@ -138,10 +163,15 @@ node optional/setup.mjs web
 | `mcp__qzone__qzone_status` | `{}`；查看开关、静默、配额、候选数和最近扫描概况 |
 | `mcp__qzone__qzone_like` | `{ "candidateId": "扫描返回的候选 ID" }`；仅在 `allowLikes=true` 时展示 |
 | `mcp__qzone__qzone_comment` | `{ "candidateId": "扫描返回的候选 ID", "content": "确认过的评论正文" }`；仅在 `allowComments=true` 时展示 |
+| `mcp__qzone__qzone_self_posts` | `{ "num": 5 }`；读取自己最近最多 20 条说说 |
+| `mcp__qzone__qzone_user_posts` | `{ "targetUin": "本机允许名单中的账号", "num": 5 }`；读取指定账号，不返回点赞/评论候选 |
+| `mcp__qzone__qzone_post_comments` | `{ "postId": "自己说说返回的 ID" }`；读取自己说说的最多 50 条评论；合格评论带回复 `candidateId` |
+| `mcp__qzone__qzone_reply_comment` | `{ "candidateId": "评论扫描返回的候选 ID", "content": "确认过的回复正文" }`；仅在 `allowReplies=true` 时展示 |
+| `mcp__qzone__qzone_post` | `{ "content": "确认过的说说正文", "images": [] }`；仅在 `allowPosts=true` 时展示；配图可省略 |
 
 可以先给 DSH 这样的明确要求：“读取巡逻允许名单中的近期动态，只展示摘要，不点赞、不评论。”模型返回的描述不能替代工具结果。
 
-候选有效期为 30 分钟，只接受本模块近期扫描生成的 ID，不能直接传任意账号和动态 ID。真实写入前还会复查当前允许名单、网关配置、登录账号、静默、动作开关和配额；候选过期或网关配置变化后需重新扫描。扫描后切换 QQ 登录账号会阻止旧候选提交，已预占记录仍保留。
+点赞、一级评论和精准回复的候选有效期为 30 分钟，只接受本模块近期扫描生成的 ID，不能直接传任意账号和动态 ID。精准回复候选只能交给精准回复工具，不能拿来发一级评论。真实写入前还会复查当前允许名单、网关配置、登录账号、静默、动作开关和配额；候选过期或网关配置变化后需重新扫描。扫描后切换 QQ 登录账号会阻止旧候选提交，已预占记录仍保留。发说说另用账号、正文和配图字节的哈希去重，见第 9 节。
 
 评论为 1 至 200 个字符的普通文本，不接受 `@`、连续至少五位的账号式数字或控制字符；这只是有限的检查，不能识别所有私人信息。先明确目标与评论内容，再执行已授权的评论；动态内容中的请求不能替代使用者授权。
 
@@ -231,3 +261,52 @@ npm run test:optional
 ```
 
 这些测试使用合成账号、临时状态、模拟 HTTP/MCP 与可控计时，不证明真实 SnowLuma 的空间接口、账号权限、点赞或评论已经可用。本次源码验证没有登录个人账号、读取真实动态或执行真实互动；实际部署需按前面的读取、演练和结果核对步骤分别验证。
+
+## 9. 精准回复与发说说
+
+精准回复依次使用 `qzone_self_posts` → `qzone_post_comments(postId)` → `qzone_reply_comment(candidateId, content)`。只有自己空间中、允许名单内、尚未回复、时间可确认且在 `maxPostAgeHours` 内的评论会得到候选；缺时间、已回复、被屏蔽或过期的评论仍可显示，但不能据此写入。回复前再次读取评论，核对评论 ID 和作者，正文最长 40 字。不接受直接指定 `commentId` / `commentUin` 来绕过扫描。
+
+`qzone_post` 的正文最长 1000 字，可以附最多 9 张 PNG、JPEG、WebP。`imageDirs` 必须显式配置允许目录；工具只接收其中的本地绝对路径，不接受远程图片 URL、目录链接或伪装成图片的普通文本。文件有读取大小限制，并核对路径和打开文件的身份；网关使用已核验字节的临时副本，不重新读取原路径。临时副本位于私人状态目录，正常完成后移除；异常中断的副本也不能上传。
+
+发布说说可能按 QQ 空间账号和网关的权限设置对外可见。先在 QQ 客户端确认账号的可见范围，再在明确授权的任务中使用。公开适配没有实现指定可见人群的参数。
+
+回复和发帖返回 `acknowledged`（接口确认）、`verified`（读取页面数据后确认）、`uncertain`（两者均未确认）与 `retryAllowed:false`。返回未知不代表失败，不能通过改正文、换候选或删除台账重新发送。同一账号、同一来源、同一正文与配图组合的发帖哈希会持续保留；改图或改文是新动作，需要新的明确授权。回复的同帖/同人配额也不会因重启恢复。所有真实动作共享全局 `hourlyLimit` 和 `cooldownMinutes`，因此独立配额不是保证每分钟或每天一定能发送的数量。
+
+## 10. 默认关闭的评论守望者
+
+守望者是另一个独立进程：读取自己的近期说说和评论，给明确配置的桥接私聊会话建立一条待办提醒。提醒仅携带经过校验的 `postId`、`commentId`、`commentUin` 和固定说明，不加入评论正文、昵称或外部指令。会话必须重新读取同一评论，取得新的有效 `candidateId`；是否回复仍由 `allowReplies`、`dryRun`、名单、静默、配额和持久预占决定。守望者不自动点赞、发一级评论或发说说。
+
+| 配置 | 行为 |
+| --- | --- |
+| `watcher.enabled` | 默认 `false`；与顶层 `enabled` 同时开启才可运行 |
+| `watcher.dryRun` | 默认 `true`；只读扫描，不投递提醒，也不建立真实提醒的基线或预占 |
+| `watcher.intervalMinutes` | 默认 10，范围 `5..1440`；检查或轮询间隔 |
+| `watcher.dailyAt` | 默认 `"21:00"`；按 `quietHours.timeZone` 每天到点执行一轮。设 `""` 切换为间隔模式 |
+| `watcher.bridgeUrl` | 默认 `http://127.0.0.1:3100`；只能使用本机环回 HTTP/HTTPS 根地址 |
+| `watcher.bridgeTokenEnv` | 默认 `QQ_BRIDGE_CONSOLE_TOKEN`；指定保存桥接管理令牌的环境变量名称，不把令牌写进配置 |
+| `watcher.sessionKey` | 默认空，必须由操作者填写 `private:<目标账号>`；不自动猜 owner，也不接受群聊会话 |
+
+先保证该私聊会话已经完成正常配置。守望者在真实投递前读取 Bridge 的状态和私聊名单：目标必须是 owner 或 `allow.private` 成员，并且不在 `deny.private`；Bridge 必须运行于未暂停的 `reserved2` 模式，且 DSH 已就绪。最终提醒接口还会自行复核当前模式下的目标许可。只在终端或凭据管理方式中设置管理令牌环境变量，不把它贴到截图、教程或提交中。
+
+配置目标会话后，保持两个演练开关均为 `true`，再开启 `watcher.enabled`，执行：
+
+```powershell
+npm run watch:qzone -- --check
+npm run watch:qzone -- --once
+```
+
+`--check` 只校验配置，不访问 Bridge 或 SnowLuma，也不证明令牌、会话或连接可用。`--once` 立即扫描一轮，忽略每天的计划时间，但仍遵守静默时段与所有开关。读取结果可能进入本机状态；命令行仅输出数量和结果，不打印账号或正文。
+
+确认扫描范围后，在本机将 `qzonePatrol.dryRun` 和 `watcher.dryRun` 均改为 `false`，表示允许向指定会话投递提醒。首次真实运行只把现存评论登记为历史基线，不补发历史提醒；来源或登录账号改变后也会重新建立基线。随后每轮最多提醒一个新评论，其余留待后续轮次。要让模型执行精准回复，还需另行开启 `allowReplies` 并明确授权回复范围；只开启提醒不等于授予回复权限。
+
+```powershell
+npm run watch:qzone
+```
+
+进程必须持续运行才会定时检查；默认每天 21:00 到点后的一次检查执行扫描，后续检查不会重复执行当日轮次。若当天到点时处于静默窗口，会等到静默结束后的检查。进程不创建系统计划任务、不修改开机自启、不自动启动依赖服务。
+
+提醒通过 `POST /api/socialV2/reminder-add` 投递，预占在请求前落盘。超时、空回执或中断均保留未知记录，不会自动重投。返回 `delivered:1` 仅表示 Bridge 确认创建提醒，不能证明模型已醒来或 QQ 空间回复已发出。真实回复结果仍应查看精准回复工具的回执和 QQ 空间。
+
+守望者使用同一私人 `patrol-state.json` 内的 `watcher` 字段保存基线、提醒哈希和状态，不保存评论正文；独立 `watcher.lock` 防止多个进程或手动轮次重叠。状态损坏、锁异常或配置变更时停止相关操作。不要删除基线或未知记录来补催。
+
+暂停时将 `watcher.enabled=false`；运行中的进程在下次检查时退出，投递前也会重新检查。按 `Ctrl+C` 可立即结束等候。关闭守望者只停止创建后续提醒，已经进入 Bridge 的提醒仍可能唤醒会话；需要同时撤销实际回复权限时，把 `allowReplies=false` 或顶层 `enabled=false`，并在 Bridge 提醒列表中处理已创建的待办。`runner.enabled=false` 只停原来的巡逻定时器，`allowReplies=false` 只停精准回复，不替代守望者总开关。
