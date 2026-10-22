@@ -19,7 +19,8 @@ import { z } from 'zod';
 // 在 MCP 里拦会连「安全拒绝理由」都拿不到，反而让模型无法把话说清楚。
 import { SENSITIVE_RE } from './sensitive.js';
 import { serializeModelData } from './qq-model-view.js';
-import { writeDiary, readDiary } from './diary-lib.js';
+// 日记不走本地文件读写：按会话隔离后，写入/读取都通过 bridge 的
+// /api/socialV2/diary/* 端点（用 x-agent-token 反查会话 key），见 src/bridge.js。
 import { addKnowledge, searchKnowledge, recentKnowledge, deleteKnowledge, pruneKnowledge, consolidateKnowledge, formatKnowledgeEntry } from './knowledge-lib.js';
 import { nowPlaying } from './music-now.js';
 
@@ -1046,20 +1047,25 @@ server.tool(
 
 server.tool(
   'qq_write_diary',
-  '写一条你自己的日记（私密，存在本机）。适合记真正发生的小事、心情、和对方有关的瞬间；不要每轮都写，不要写成汇报/客服周报。一天最多 20 条、单条最多 4000 字。',
+  '写一条你自己的日记（私密，只属于当前这个 QQ 会话，别的会话看不到）。适合记真正发生的小事、心情、和对方有关的瞬间；不要每轮都写，不要写成汇报/客服周报。一天最多 20 条、单条最多 4000 字。',
   {
     text: z.string().describe('日记正文，用你自己的口气写，不要写成总结或客服周报'),
     title: z.string().optional().describe('可选短标题（最多 60 字）'),
     mood: z.string().optional().describe('可选心情，如 开心/别扭/有点困（最多 40 字）'),
-    tags: z.array(z.string()).optional().describe('可选标签，最多 8 个（如 日常、他、群聊）')
+    tags: z.array(z.string()).optional().describe('可选标签，最多 8 个（如 日常、他、群聊）'),
+    token: z.string().describe('会话令牌（唤醒提示词里的【会话令牌】）；日记按会话隔离，用它决定写进哪一本')
   },
-  async ({ text, title, mood, tags }) => {
+  async ({ text, title, mood, tags, token }) => {
     try {
-      const saved = writeDiary(ROOT, { text, title, mood, tags });
+      const data = await agentApi('/api/socialV2/diary/write', {
+        method: 'POST',
+        body: JSON.stringify({ text, title, mood, tags }),
+        headers: { 'x-agent-token': token }
+      });
       return {
         content: [{
           type: 'text',
-          text: `日记已写入：${saved.day} ${saved.time}${saved.title ? '（' + saved.title + '）' : ''}；今天第 ${saved.entriesToday} 条。`
+          text: `日记已写入：${data.day} ${data.time}${data.title ? '（' + data.title + '）' : ''}；这本今天第 ${data.entriesToday} 条。`
         }]
       };
     } catch (error) {
@@ -1070,18 +1076,25 @@ server.tool(
 
 server.tool(
   'qq_read_diary',
-  '读你自己的日记（只读）：不传 day 时读最近 n 天，传 day 读指定日期。用于保持连续性，不要整段念给别人听。',
+  '读你自己的日记（只读，只读当前会话这一本）：不传 day 时读最近 n 天，传 day 读指定日期。用于保持连续性，不要整段念给别人听。',
   {
     n: z.number().int().min(1).max(7).optional().describe('最近几天，默认 2，最多 7'),
-    day: z.string().optional().describe('指定日期 YYYY-MM-DD；传了就只读这一天')
+    day: z.string().optional().describe('指定日期 YYYY-MM-DD；传了就只读这一天'),
+    token: z.string().describe('会话令牌（唤醒提示词里的【会话令牌】）；日记按会话隔离，用它决定读哪一本')
   },
-  async ({ n, day }) => {
+  async ({ n, day, token }) => {
     try {
-      const data = readDiary(ROOT, { n, day });
-      if (!data.entries.length) {
-        return { content: [{ type: 'text', text: '日记本还是空的（或这几天没有记录）。' }] };
+      const qs = new URLSearchParams();
+      if (n != null) qs.set('n', String(n));
+      if (day) qs.set('day', String(day));
+      const data = await agentApi(`/api/socialV2/diary/read${qs.size ? '?' + qs.toString() : ''}`, {
+        headers: { 'x-agent-token': token }
+      });
+      const entries = Array.isArray(data.entries) ? data.entries : [];
+      if (!entries.length) {
+        return { content: [{ type: 'text', text: '这本日记还是空的（或这几天没有记录）。' }] };
       }
-      const body = data.entries.map((entry) => `【${entry.day}】\n${entry.text}`).join('\n\n');
+      const body = entries.map((entry) => `【${entry.day}】\n${entry.text}`).join('\n\n');
       const text = body.length > 12000 ? `${body.slice(0, 12000)}\n…（已截断）` : body;
       return { content: [{ type: 'text', text }] };
     } catch (error) {

@@ -181,6 +181,7 @@ const METHOD_ARG_WRAPPERS = {
   'workspace/rename': 'request',
   'workspace/delete': 'request',
   'workspace/archiveSession': 'request',
+  'workspace/unarchiveSession': 'request',
   'workspace/insertBefore': 'request',
   'workspace/insertSessionBefore': 'request',
   'agentPresets/list': null,

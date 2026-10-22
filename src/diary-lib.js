@@ -1,12 +1,13 @@
 // 小鲸鱼的日记本（本地文件存储）。
 //
 // 设计：
-// - 一天一个 Markdown 文件：state/diary/YYYY-MM-DD.md（人可以直接打开看）
+// - 一天一个 Markdown 文件：state/diary/sessions/<scope>/YYYY-MM-DD.md（人可以直接打开看）
 // - 同目录 index.jsonl 只存元数据，便于快速统计/检索，不重复存正文
 // - 写入只追加，不覆盖历史；单条长度、每日条数都有上限，防止被诱导刷屏
 // - 读取不暴露绝对路径；只返回日期、时间和正文
 //
-// 说明：日记是「她自己的」，不按 QQ 会话隔离；同一个人格的所有会话共享同一本日记。
+// 说明：每个 QQ 会话使用独立的日记目录，避免将内容注入其它会话。
+// 不传 key 时仍访问旧全局目录，仅供兼容旧测试或管理员手动迁移使用。
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -31,8 +32,20 @@ export function isValidDay(day) {
   return !Number.isNaN(d.getTime()) && dayKey(d) === s;
 }
 
-function diaryRoot(root) {
-  return path.join(root, 'state', DIARY_DIR);
+// 会话 key → 目录名（private:123 → private_123）。只保留安全字符，防路径穿越。
+export function diaryScopeDir(key) {
+  return String(key ?? '')
+    .trim()
+    .replace(/[^A-Za-z0-9_.-]+/g, '_')
+    .replace(/^\.+/, '_')
+    .slice(0, 80) || '_unkeyed';
+}
+
+// key 为空时指向旧的全局目录（state/diary/），只给控制台/迁移脚本用。
+function diaryRoot(root, key = '') {
+  const scope = String(key ?? '').trim();
+  if (!scope) return path.join(root, 'state', DIARY_DIR);
+  return path.join(root, 'state', DIARY_DIR, 'sessions', diaryScopeDir(scope));
 }
 
 function sanitizeText(text) {
@@ -75,9 +88,10 @@ function countEntriesForDay(indexFile, day) {
  * @param {string} root qq-bridge 根目录
  * @param {{text:string,title?:string,mood?:string,tags?:string[]}} entry
  * @param {Date} [now]
+ * @param {string} [key] QQ 会话 key（private:X / group:Y）；不传则写旧的全局目录
  * @returns {{ok:true,day:string,time:string,title:string,file:string,entryId:string,entriesToday:number}}
  */
-export function writeDiary(root, entry, now = new Date()) {
+export function writeDiary(root, entry, now = new Date(), key = '') {
   const text = sanitizeText(entry?.text);
   if (!text) throw new Error('日记内容不能为空');
   if (text.length > MAX_TEXT) throw new Error(`日记内容过长（${text.length} > ${MAX_TEXT} 字）`);
@@ -88,7 +102,8 @@ export function writeDiary(root, entry, now = new Date()) {
     : [];
   const day = dayKey(now);
   const time = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
-  const dir = diaryRoot(root);
+  const scopeKey = String(key ?? '').trim();
+  const dir = diaryRoot(root, scopeKey);
   const indexFile = path.join(dir, 'index.jsonl');
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const entriesToday = countEntriesForDay(indexFile, day);
@@ -107,18 +122,19 @@ export function writeDiary(root, entry, now = new Date()) {
   if (freshFile) prefix = `# ${day} 的日记\n\n`;
   fs.appendFileSync(file, `${prefix}${lines.join('\n')}`, 'utf8');
   const meta = { id: entryId, day, time, title, mood, tags, chars: text.length, createdAt: now.toISOString() };
+  if (scopeKey) meta.key = scopeKey;
   fs.appendFileSync(indexFile, `${JSON.stringify(meta)}\n`, 'utf8');
-  return { ok: true, day, time, title, file: path.relative(path.join(root, 'state'), file).replace(/\\/g, '/'), entryId, entriesToday: entriesToday + 1 };
+  return { ok: true, day, time, title, file: path.relative(path.join(root, 'state'), file).replace(/\\/g, '/'), entryId, entriesToday: entriesToday + 1, ...(scopeKey ? { key: scopeKey } : {}) };
 }
 
 /**
  * 读日记：指定 day 读当天；否则按日期从新到旧读最近 n 天。
  * @param {string} root
- * @param {{n?:number,day?:string}} [options]
+ * @param {{n?:number,day?:string,key?:string}} [options] key = QQ 会话 key；不传则读旧的全局目录
  * @returns {{ok:true,days:number,entries:Array<{day:string,text:string}>,truncated:boolean}}
  */
 export function readDiary(root, options = {}) {
-  const dir = diaryRoot(root);
+  const dir = diaryRoot(root, options?.key);
   const requestedDay = options?.day === undefined || options?.day === null || options?.day === ''
     ? ''
     : String(options.day);
