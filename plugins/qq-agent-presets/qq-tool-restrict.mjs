@@ -234,6 +234,12 @@ const SAFE_EXACT = new Set([
   'mcp__qzone__qzone_status',
   'mcp__qzone__qzone_like',
   'mcp__qzone__qzone_comment',
+  // 扩展空间工具；读取仍按目标名单，精准回复使用近期评论候选，发帖需独立开启。
+  'mcp__qzone__qzone_self_posts',
+  'mcp__qzone__qzone_post_comments',
+  'mcp__qzone__qzone_reply_comment',
+  'mcp__qzone__qzone_user_posts',
+  'mcp__qzone__qzone_post',
 ])
 
 export function apply(ctx) {
