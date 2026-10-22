@@ -5,14 +5,15 @@
 | 你要做什么 | 对应文档 |
 | --- | --- |
 | 安装、启动和排错 | [QUICKSTART.md](QUICKSTART.md) |
+| 按会话模型、日记隔离、角色注入、插件与升级 | [SESSION_FEATURES.md](guides/SESSION_FEATURES.md) |
 | 按需配置全部已有扩展能力 | [OPTIONAL_FEATURES.md](OPTIONAL_FEATURES.md) |
 | 图片、表情、形象、语音发送和语音转写 | [OPTIONAL_MEDIA.md](guides/OPTIONAL_MEDIA.md) |
 | 记忆、知识库、日记和提醒 | [OPTIONAL_MEMORY.md](guides/OPTIONAL_MEMORY.md) |
 | 黑话、风格、搜索、热榜、主动话题和开发助手 | [OPTIONAL_AUTOMATION.md](guides/OPTIONAL_AUTOMATION.md) |
 | iPhone 读取与按需控制 | [OPTIONAL_IPHONE.md](guides/OPTIONAL_IPHONE.md) |
 | Android 读取与按需控制 | [OPTIONAL_ANDROID.md](guides/OPTIONAL_ANDROID.md) |
-| QQ 空间读取与按需写入 | [OPTIONAL_QZONE.md](guides/OPTIONAL_QZONE.md) |
-| QQ 空间巡逻配置、演练与运行管理 | [OPTIONAL_QZONE_PATROL.md](guides/OPTIONAL_QZONE_PATROL.md) |
+| QQ 空间 phone 兼容入口 | [OPTIONAL_QZONE.md](guides/OPTIONAL_QZONE.md) |
+| QQ 空间 9 工具、精准回复、发帖、巡逻与评论守望者 | [OPTIONAL_QZONE_PATROL.md](guides/OPTIONAL_QZONE_PATROL.md) |
 | B 站四项只读工具 | [OPTIONAL_BILIBILI.md](guides/OPTIONAL_BILIBILI.md) |
 | 了解消息流程、功能和未完成部分 | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | 按职责定位源码与本机数据 | [FOLDER_MAP.md](FOLDER_MAP.md) |

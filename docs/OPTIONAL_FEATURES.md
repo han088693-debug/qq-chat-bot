@@ -17,11 +17,14 @@
 | 本机正在播放的音乐 | `qq_music_now` | Windows 媒体会话；[媒体教程](guides/OPTIONAL_MEDIA.md) |
 | iPhone | `optional/config.json` 的 `iphone` | 独立 SideTap；[iPhone 教程](guides/OPTIONAL_IPHONE.md) |
 | Android | `optional/config.json` 的 `phone.android` | ADB 与设备授权；[Android 教程](guides/OPTIONAL_ANDROID.md) |
-| QQ 空间 | `optional/config.json` 的 `phone.qzone` | 支持对应接口的 SnowLuma；[QQ 空间教程](guides/OPTIONAL_QZONE.md) |
-| QQ 空间定时巡逻 | `optional/config.json` 的 `qzonePatrol` | 支持对应接口的 SnowLuma；[巡逻教程](guides/OPTIONAL_QZONE_PATROL.md) |
+| QQ 空间 phone 兼容入口 | `optional/config.json` 的 `phone.qzone` | 支持对应接口的 SnowLuma；[兼容入口教程](guides/OPTIONAL_QZONE.md) |
+| QQ 空间读取、赞评、精准回复、发帖与巡逻 | `optional/config.json` 的 `qzonePatrol`；9 个工具，各类写入独立开关 | 支持对应接口的 SnowLuma；[空间扩展教程](guides/OPTIONAL_QZONE_PATROL.md) |
+| QQ 空间新评论守望者 | `qzonePatrol.watcher`；独立进程、默认关闭且演练开启 | SnowLuma 与就绪的二代 Bridge；[守望者配置](guides/OPTIONAL_QZONE_PATROL.md) |
 | B 站只读 | `optional/config.json` 的 `bilibili` | 独立 Python MCP；[B 站教程](guides/OPTIONAL_BILIBILI.md) |
 
 角色卡、白名单、聊天模式、等待、唤醒、连续气泡和用量面板属于基础桥接，见 [快速开始](QUICKSTART.md) 与 [流程说明](ARCHITECTURE.md)。
+
+按会话模型、思考强度、角色按需注入和 Bridge 插件也属于基础桥接，配置与升级见 [会话功能教程](guides/SESSION_FEATURES.md)。QQ 空间新部署推荐 `qzonePatrol`：它同时提供按需工具和单独启动的巡逻，不要求开启定时运行才能使用读取工具。
 
 ## 2. 两份配置文件
 
@@ -71,7 +74,9 @@ node optional/setup.mjs web --remove
 
 它只移除 `mcp-qq-optional-*` 管理项，不卸载外部软件，不删除账号或设备数据。若 profile 已有别的 `phone`、`iphone`、`bili`、`qzone` 服务名，安装器会停止并提示冲突；先在本机检查旧项，再选择保留或迁移，避免两个入口绕过同一套限制。备份文件可能含旧 MCP 的私人设置，也不要上传。
 
-空间巡逻的定时进程单独启动，安装或移除 MCP 不会替你管理它。暂停、恢复和完全停用按 [巡逻教程](guides/OPTIONAL_QZONE_PATROL.md) 执行；关闭 `phone.qzone` 不会关闭 `qzonePatrol`。
+空间巡逻与评论守望者均单独启动，安装或移除 MCP 不会替你管理进程。暂停、恢复和完全停用按 [巡逻教程](guides/OPTIONAL_QZONE_PATROL.md) 执行；关闭 `phone.qzone` 不会关闭 `qzonePatrol`。巡逻进程只扫描及按需点赞；守望者只向指定允许私聊投递固定模板提醒，模型后续回复另受 `allowReplies` 与候选、名单、配额等限制。
+
+守望者命令是 `npm run watch:qzone`；加 `-- --check` 只做不联网校验，加 `-- --once` 执行一轮并仍遵守静默时段和开关。它默认按 `dailyAt='21:00'` 及配置时区运行；把 `dailyAt` 设为空才使用间隔模式。总 `dryRun` 或 `watcher.dryRun` 任一开启时不投递提醒，也不占用提醒台账。完整启用与基线说明以专门教程为准。
 
 ## 4. 怎样判断功能已经配置好
 
@@ -95,7 +100,12 @@ node optional/setup.mjs web --remove
 | `socialV2.context.diaryInPrompt=false` | 不自动注入近期日记；日记读写工具仍存在 |
 | `socialV2.voice.enabled=false` / `tools.sendVoice=false` | 限制 AI 语音发送；控制台手动调试入口另有权限与发送检查 |
 | `socialV2.proactive.enabled=false` | 停止二代主动机会；直接触发、提及、正常唤醒与已有提醒不因此消失 |
-| `qzonePatrol.enabled=false` | 禁止巡逻扫描与写操作；`phone.qzone` 的按需空间工具另有开关 |
-| `qzonePatrol.dryRun=true` | 巡逻互动只返回演练结果；读取动态仍访问 SnowLuma，并可能进入模型上下文 |
+| `qzonePatrol.enabled=false` | 停止该模块访问 QQ 的读取、写入和守望者任务；本机状态检查仍可用，`phone.qzone` 兼容入口另有开关 |
+| `qzonePatrol.dryRun=true` | 点赞、评论、精准回复、发帖只演练；读取仍访问 SnowLuma，并可能进入模型上下文 |
+| `qzonePatrol.allowLikes/allowComments/allowReplies/allowPosts=false` | 分别关闭点赞、一级评论、精准楼中楼回复、发帖；保持其他读取和已开启类别不变 |
+| `qzonePatrol.runner.enabled=false` | 禁止独立定时巡逻；不关闭仍启用的 MCP 按需工具 |
+| `qzonePatrol.watcher.enabled=false` | 停止守望者新扫描与提醒，常驻进程退出；已建立的 Bridge 提醒不会自动取消 |
+| `qzonePatrol.watcher.dryRun=true` | 守望者只演练，不投递提醒或占用提醒台账；读取仍可能访问 SnowLuma |
+| `phone.qzone.allowWrites=false` | 关闭 phone 兼容入口的空间写入；不改变 `qzonePatrol` |
 
 当前日记、知识库、本机音乐和安全搜索没有统一的独立关闭字段。若部署要求完全不向模型提供其中某项能力，需要修改并检查工具注册 / DSH profile；仅在提示词里写“不要使用”不等于关闭。
