@@ -1575,6 +1575,30 @@ tr:last-child td {
   color:var(--text-input);
   border-color:var(--accent-border-focus)
 }
+.audit-verdicts {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:10px
+}
+.audit-chip {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 10px;
+  border-radius:999px;
+  font-size:12px;
+  border:1px solid var(--border-subtle);
+  background:var(--surface-sunken)
+}
+.audit-chip.bad { border-color:#c0392b; color:#c0392b }
+.audit-chip.warn { border-color:#b8860b; color:#8a6508 }
+.audit-chip.good { border-color:#2e7d4f; color:#2e7d4f }
+.audit-report {
+  min-height:240px;
+  white-space:pre;
+  font-size:12px
+}
 #section-silent {
   grid-column:1/-1
 }
@@ -1822,6 +1846,24 @@ button:active:not(:disabled) {
 <section id="section-activity" data-page="overview" class="card">
       <h2>活动日志（最近 100 条）</h2>
       <pre id="activity">（空）</pre>
+    </section>
+<section id="section-persona-audit" data-page="persona" class="card span-all">
+      <h2>人味仪表盘</h2>
+      <div class="meta">用最近的聊天记录量化「像不像人」：话轮结构、句长、工具痕迹、延迟分布、内部独白、记忆健康度。</div>
+      <div class="row" style="margin-top:10px">
+        <label style="flex:0 0 auto">会话</label>
+        <input type="text" id="auditKey" placeholder="private:账号 或 group:群号" style="flex:0 1 260px">
+        <label style="flex:0 0 auto">天数</label>
+        <select id="auditDays" style="flex:0 0 100px">
+          <option value="1">1 天</option>
+          <option value="3">3 天</option>
+          <option value="7">7 天</option>
+        </select>
+        <button id="auditRefresh" class="small">刷新</button>
+        <span class="meta" id="auditMsg"></span>
+      </div>
+      <div id="auditVerdicts" class="audit-verdicts"></div>
+      <pre id="auditReport" class="code-area audit-report">点「刷新」采集一次</pre>
     </section>
 <section id="section-persona" data-page="persona" class="card span-all">
       <h2>人格与角色</h2>
@@ -3045,6 +3087,66 @@ document.getElementById('roleSet').addEventListener('click', async () => {
   const r = await api('/api/role', 'POST', { role: document.getElementById('roleInput').value.trim() });
   if (r.ok) refreshRoles(); else alert(r.error || '设置失败');
 });
+// ── 人味仪表盘 ──────────────────────────────────────────────
+async function loadPersonaAudit() {
+  const key = document.getElementById('auditKey').value.trim();
+  const days = document.getElementById('auditDays').value || '1';
+  const msg = document.getElementById('auditMsg');
+  const report = document.getElementById('auditReport');
+  const chips = document.getElementById('auditVerdicts');
+  if (!/^(private|group):[1-9]\d*$/.test(key)) {
+    msg.textContent = '请输入会话 key（private:账号 或 group:群号）';
+    report.textContent = '';
+    chips.innerHTML = '';
+    return;
+  }
+  msg.textContent = '采集中…';
+  const r = await api(`/api/persona/audit?key=${encodeURIComponent(key)}&days=${days}`);
+  if (!r || r.ok === false) {
+    msg.textContent = (r && r.error) || '采集失败';
+    report.textContent = (r && r.error) || '采集失败';
+    chips.innerHTML = '';
+    return;
+  }
+  const m = r;
+  const pct = (v) => Math.round((Number(v) || 0) * 100) + '%';
+  const lines = [
+    `窗口：最近 ${m.window.messages} 条消息 / 出站 ${m.window.botTexts} 条 / 活动日志 ${m.window.activityEntries} 行`,
+    '',
+    '[话轮]',
+    `真人话轮 ${m.turns.humanRuns} ｜ bot 话轮 ${m.turns.botRuns} ｜ 必回率 ${pct(m.turns.replyRate)} ｜ 每条真人消息 ${m.turns.repliesPerHumanMessage} 条 bot`,
+    `最大连发 ${m.turns.maxBurst} ｜ 单条占比 ${pct(m.turns.singleReplyShare)} ｜ 严格交替 ${m.turns.strictAlternation ? '是' : '否'}`,
+    '',
+    '[句长]',
+    `bot：均值 ${m.length.bot.mean} 字 / 中位 ${m.length.bot.p50} / p90 ${m.length.bot.p90}`,
+    `真人：均值 ${m.length.human.mean} 字 / 中位 ${m.length.human.p50} / p90 ${m.length.human.p90}`,
+    '',
+    '[痕迹]',
+    `工具名/链接 ${m.toolTrace.hits} 条（${pct(m.toolTrace.rate)}）｜ 重复正文 ${pct(m.repeat.dupRate)}`,
+    m.repeat.top.length ? '重复 Top：' + m.repeat.top.map((t) => `“${t.text}”×${t.count}`).join('，') : '',
+    '',
+    '[延迟]',
+    `样本 ${m.latency.n} ｜ 中位 ${m.latency.p50Sec}s ｜ p90 ${m.latency.p90Sec}s ｜ 最长 ${m.latency.maxSec}s`,
+    `≤5s ${m.latency.under5} · 5–15s ${m.latency.from5to15} · 15–60s ${m.latency.from15to60} · >60s ${m.latency.over60} ｜ 主动开口 ${m.latency.proactive}`,
+    '',
+    '[内部独白]',
+    `独白/发送 ${m.monologue.internalOutputs} / ${m.monologue.sends}（${pct(m.monologue.ratio)}）｜ 交接班句子 ${m.monologue.handoverHits}`,
+    ...m.monologue.handoverSamples.map((s) => '  · ' + s),
+    '',
+    '[记忆]',
+    `风格 ${m.memory.styleNotes} · 避免 ${m.memory.styleAvoid} · 例句 ${m.memory.fewshots} · 印象 ${m.memory.memberImpressions} · 关系 ${m.memory.affection} · 话题 ${m.memory.activeTopics}`,
+    '',
+    '[判断]',
+    ...m.verdicts.map((v) => `${v.level === 'bad' ? '🔴' : v.level === 'warn' ? '🟡' : '🟢'} ${v.text}`),
+  ].filter((line) => line !== '');
+  report.textContent = lines.join('\n');
+  chips.innerHTML = (m.verdicts || [])
+    .map((v) => `<span class="audit-chip ${v.level}">${esc(v.text)}</span>`)
+    .join('');
+  msg.textContent = '已刷新 ' + new Date().toLocaleTimeString();
+}
+document.getElementById('auditRefresh').addEventListener('click', loadPersonaAudit);
+loadPersonaAudit();
 document.getElementById('roleClear').addEventListener('click', async () => { await api('/api/role', 'POST', { role: null }); refreshRoles(); refresh(); });
 document.getElementById('roleCreate').addEventListener('click', async () => {
   const name = document.getElementById('newRoleName').value.trim();
@@ -4161,7 +4263,7 @@ function renderSlangPanel() {
 
 async function refreshSlang() {
   try {
-    const r = await api('/api/slang');
+    const r = await api('/api/plugins/slang/list');
     slangEntriesCache = r.entries || [];
     renderSlangPanel();
   } catch (e) {
@@ -4233,7 +4335,7 @@ document.getElementById('slangRejectedSelectAll').addEventListener('change', (e)
 document.getElementById('slangBatchResearch').addEventListener('click', async () => {
   const ids = selectedIdsForStatus('candidate');
   if (!ids.length) { alert('请先勾选要研究的候选词'); return; }
-  const r = await api('/api/slang/research', 'POST', { ids });
+  const r = await api('/api/plugins/slang/research', 'POST', { ids });
   setSlangMsg(r.ok ? `✅ 已送 ${r.count} 条候选到 DSH 深度联网研究，完成后刷新查看结果` : ('❌ ' + (r.error || '失败')), r.ok);
   if (r.ok) refreshSlang();
 });
@@ -4241,7 +4343,7 @@ document.getElementById('slangBatchConfirm').addEventListener('click', async () 
   const ids = selectedIdsForStatus('candidate');
   if (!ids.length) { alert('请先勾选要确认的候选词'); return; }
   if (!confirm(`确定批量确认 ${ids.length} 条候选？缺少含义的会被跳过。`)) return;
-  const r = await api('/api/slang/batch-confirm', 'POST', { ids });
+  const r = await api('/api/plugins/slang/batch-confirm', 'POST', { ids });
   setSlangMsg(r.ok ? `✅ 已确认 ${r.confirmedCount} 条，跳过 ${r.skippedCount} 条` : ('❌ ' + (r.error || '失败')), r.ok);
   if (r.ok) { slangSelected.clear(); refreshSlang(); }
 });
@@ -4249,7 +4351,7 @@ document.getElementById('slangBatchReject').addEventListener('click', async () =
   const ids = selectedIdsForStatus('candidate');
   if (!ids.length) { alert('请先勾选要拒绝的候选词'); return; }
   if (!confirm(`确定拒绝 ${ids.length} 条候选？`)) return;
-  const r = await api('/api/slang/batch-reject', 'POST', { ids });
+  const r = await api('/api/plugins/slang/batch-reject', 'POST', { ids });
   setSlangMsg(r.ok ? `✅ 已拒绝 ${r.rejectedCount} 条` : ('❌ ' + (r.error || '失败')), r.ok);
   if (r.ok) { slangSelected.clear(); refreshSlang(); }
 });
@@ -4257,7 +4359,7 @@ document.getElementById('slangBatchDeleteCand').addEventListener('click', async 
   const ids = selectedIdsForStatus('candidate');
   if (!ids.length) { alert('请先勾选要删除的候选词'); return; }
   if (!confirm(`确定删除 ${ids.length} 条候选？此操作不可恢复！`)) return;
-  const r = await api('/api/slang/batch-delete', 'POST', { ids });
+  const r = await api('/api/plugins/slang/batch-delete', 'POST', { ids });
   setSlangMsg(r.ok ? `✅ 已删除 ${r.removedCount} 条候选` : ('❌ ' + (r.error || '失败')), r.ok);
   if (r.ok) { slangSelected.clear(); refreshSlang(); }
 });
@@ -4265,7 +4367,7 @@ document.getElementById('slangBatchDeleteConfirmed').addEventListener('click', a
   const ids = selectedIdsForStatus('confirmed');
   if (!ids.length) { alert('请先勾选要删除的已确认词条'); return; }
   if (!confirm(`确定删除 ${ids.length} 条已确认黑话？此操作不可恢复！`)) return;
-  const r = await api('/api/slang/batch-delete', 'POST', { ids });
+  const r = await api('/api/plugins/slang/batch-delete', 'POST', { ids });
   setSlangMsg(r.ok ? `✅ 已删除 ${r.removedCount} 条已确认` : ('❌ ' + (r.error || '失败')), r.ok);
   if (r.ok) { slangSelected.clear(); refreshSlang(); }
 });
@@ -4273,7 +4375,7 @@ document.getElementById('slangBatchDeleteRejected').addEventListener('click', as
   const ids = selectedIdsForStatus('rejected');
   if (!ids.length) { alert('请先勾选要删除的已拒绝词条'); return; }
   if (!confirm(`确定删除 ${ids.length} 条已拒绝词条？此操作不可恢复！`)) return;
-  const r = await api('/api/slang/batch-delete', 'POST', { ids });
+  const r = await api('/api/plugins/slang/batch-delete', 'POST', { ids });
   setSlangMsg(r.ok ? `✅ 已删除 ${r.removedCount} 条已拒绝` : ('❌ ' + (r.error || '失败')), r.ok);
   if (r.ok) { slangSelected.clear(); refreshSlang(); }
 });
@@ -4303,7 +4405,7 @@ document.getElementById('slangModalDirectConfirm').addEventListener('click', asy
 });
 document.getElementById('slangModalSendResearch').addEventListener('click', async () => {
   if (!slangModalId) return;
-  const r = await api('/api/slang/research', 'POST', { ids: [slangModalId] });
+  const r = await api('/api/plugins/slang/research', 'POST', { ids: [slangModalId] });
   setSlangMsg(r.ok ? `✅ 已送「${slangEntriesCache.find((x) => x.id === slangModalId)?.content || ''}」到 DSH 深度联网研究，稍后刷新查看结果` : ('❌ ' + (r.error || '失败')), r.ok);
   closeSlangModal();
   refreshSlang();
@@ -4317,7 +4419,7 @@ document.getElementById('slangAdd').addEventListener('click', async () => {
   const usage = document.getElementById('slangUsage').value.trim();
   const example = document.getElementById('slangExample').value.trim();
   if (!content) { alert('词条不能为空'); return; }
-  const r = await api('/api/slang', 'POST', { content, meaning, usage, example });
+  const r = await api('/api/plugins/slang/add', 'POST', { content, meaning, usage, example });
   document.getElementById('slangMsg').textContent = r.ok ? '✅ 已添加' : ('❌ ' + (r.error || '失败'));
   document.getElementById('slangMsg').className = r.ok ? 'meta ok' : 'meta err';
   if (r.ok) {
@@ -4329,15 +4431,15 @@ document.getElementById('slangAdd').addEventListener('click', async () => {
   }
 });
 document.getElementById('slangExtract').addEventListener('click', async () => {
-  const r = await api('/api/slang/extract', 'POST', {});
+  const r = await api('/api/plugins/slang/extract', 'POST', {});
   setSlangMsg(r.ok ? '✅ 已触发提取' : ('❌ ' + (r.error || '失败')), r.ok);
 });
 document.getElementById('slangResearch').addEventListener('click', async () => {
-  const r = await api('/api/slang/research', 'POST', {});
+  const r = await api('/api/plugins/slang/research', 'POST', {});
   setSlangMsg(r.ok ? ('✅ 已触发研究 ' + r.count + ' 条') : ('❌ ' + (r.error || '失败')), r.ok);
 });
 function loadSlangConfig() {
-  api('/api/slang').then(r => {
+  api('/api/plugins/slang/list').then(r => {
     const c = r.config || {};
     document.getElementById('slangEnabled').checked = c.enabled !== false;
     document.getElementById('slangExtractMin').value = c.extractMinMessages ?? 10;
@@ -4350,7 +4452,7 @@ function loadSlangConfig() {
   }).catch(() => {});
 }
 document.getElementById('slangConfigSave').addEventListener('click', async () => {
-  const r = await api('/api/slang/config', 'POST', {
+  const r = await api('/api/plugins/slang/config', 'POST', {
     enabled: document.getElementById('slangEnabled').checked,
     extractMinMessages: Number(document.getElementById('slangExtractMin').value) || 10,
     extractCooldownMs: Number(document.getElementById('slangCooldown').value) || 300000,
