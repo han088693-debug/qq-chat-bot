@@ -178,7 +178,8 @@
       "maxWakePerMinute": 1,
       "maxWakePerHour": 12,
       "noActionLimit": 3,
-      "maxWakeConfigReminders": 2
+      "maxWakeConfigReminders": 2,
+      "privateSkipProbability": 0.15
     },
     "send": {
       "burstEnabled": true,
@@ -248,7 +249,8 @@
       "inlineWakeMessages": true,
       "wakeMessageLimit": 12,
       "wakeRecentLimit": 4,
-      "wakeMaxChars": 6000
+      "wakeMaxChars": 6000,
+      "diaryInPrompt": true
     },
     "initialPromptMaxChars": 2000,
     "media": {
@@ -260,7 +262,8 @@
       "enabled": false,
       "maxSeconds": 120,
       "timeoutMs": 90000
-    }
+    },
+    "sessionPolicies": {}
   },
   "webSearch": {
     "provider": "auto",
