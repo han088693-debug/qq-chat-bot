@@ -357,10 +357,11 @@ test('MCP tool discovery follows live flags and calls recheck disabled state', a
   await server.connect(serverTransport);
   await client.connect(clientTransport);
   try {
-    assert.deepEqual((await client.listTools()).tools.map(tool => tool.name), ['qzone_scan', 'qzone_status']);
+    assert.deepEqual((await client.listTools()).tools.map(tool => tool.name),
+      ['qzone_scan', 'qzone_status', 'qzone_self_posts', 'qzone_user_posts', 'qzone_post_comments']);
     f.config.allowLikes = true;
     f.config.allowComments = true;
-    assert.equal((await client.listTools()).tools.length, 4);
+    assert.equal((await client.listTools()).tools.length, 7);
     f.config.enabled = false;
     assert.deepEqual((await client.listTools()).tools, []);
     assert.equal((await client.callTool({ name: 'qzone_scan', arguments: {} })).isError, true);

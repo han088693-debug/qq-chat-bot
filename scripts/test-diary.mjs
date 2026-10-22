@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { writeDiary, readDiary, dayKey, isValidDay, MAX_ENTRIES_PER_DAY } from '../src/diary-lib.js';
+import { writeDiary, readDiary, diaryScopeDir, dayKey, isValidDay, MAX_ENTRIES_PER_DAY } from '../src/diary-lib.js';
 
 function tempRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'qq-bridge-diary-'));
@@ -72,4 +72,21 @@ test('标签数量与长度被收敛，坏索引行不影响写入', () => {
   const tagLine = raw.split('\n').find((line) => line.startsWith('- 标签：')) ?? '';
   assert.ok((tagLine.match(/tag-/g) ?? []).length <= 8, '标签最多 8 个');
   assert.ok(saved.title.length <= 60, '标题被截断');
+});
+
+test('按会话隔离：每个 key 一本，互不可见，不碰旧全局目录', () => {
+  const root = tempRoot();
+  const a = writeDiary(root, { text: 'A 会话的事' }, new Date('2026-10-21T10:00:00'), 'private:111');
+  const b = writeDiary(root, { text: 'B 会话的事' }, new Date('2026-10-21T10:05:00'), 'private:222');
+  assert.equal(a.key, 'private:111');
+  assert.equal(b.ok, true);
+  const readA = readDiary(root, { n: 2, key: 'private:111' });
+  const readB = readDiary(root, { n: 2, key: 'private:222' });
+  assert.match(readA.entries[0].text, /A 会话的事/);
+  assert.doesNotMatch(readA.entries[0].text, /B 会话的事/);
+  assert.match(readB.entries[0].text, /B 会话的事/);
+  assert.equal(fs.existsSync(path.join(root, 'state', 'diary', '2026-10-21.md')), false);
+  assert.equal(readDiary(root, { n: 2 }).days, 0);
+  assert.equal(diaryScopeDir('../../etc'), '__.._etc');
+  assert.ok(fs.existsSync(path.join(root, 'state', 'diary', 'sessions', 'private_111')));
 });

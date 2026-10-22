@@ -22,6 +22,10 @@ import * as tokenLedger from '../src/token-ledger.js';
 import * as voiceLib from '../src/send-voice-lib.js';
 import * as presetPrompt from '../src/preset-prompt.js';
 import * as roleCard from '../src/role-card.js';
+import * as wakeRoleCard from '../src/wake-role-card.mjs';
+import * as wakeExtras from '../src/wake-extras.mjs';
+import * as outgoingFilter from '../src/outgoing-filter.mjs';
+import * as personaAudit from '../src/persona-audit.mjs';
 import * as stateAcl from '../src/state-acl.mjs';
 import * as reminders from '../src/reminders.js';
 import * as diaryLib from '../src/diary-lib.js';
@@ -173,6 +177,7 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
     ...markdown, ...sensitive, ...wait, ...safeFetch, ...forward, ...slang, ...sticker,
     ...stickerMemory, ...hotTrends,
     ...modelPrices, ...tokenLedger, ...voiceLib, ...stateAcl, ...presetPrompt, ...roleCard,
+    ...wakeRoleCard, ...wakeExtras, ...outgoingFilter, ...personaAudit,
     ...reminders, ...diaryLib, ...holidays, ...styleLearner,
     // bridge.js 顶层有 `const execFileAsync = promisify(execFile)`（图片降采样用），
     // 测试里不该真的 spawn ffmpeg：桩成"什么都不产出"，prepareImageForModel 会走失败回退分支。
@@ -206,6 +211,13 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
   // should see the same prototypes as real bridge messages, just as in Node.
   const modelViewSource = fs.readFileSync(path.join(root, 'src/qq-model-view.js'), 'utf8').replace(/^export /gm, '');
   vm.runInContext(`Object.assign(globalThis, (() => { ${modelViewSource}\nreturn { compactModelMessage, compactModelData, serializeModelData }; })());`, context);
+  // Router plain-object checks must run in the same realm as the bridge's config,
+  // just like production. Importing the class from the outer test realm rejects
+  // otherwise-valid HTTP request bodies solely because their prototypes differ.
+  const routerSource = fs.readFileSync(path.join(root, 'src/core/session-router.mjs'), 'utf8').replace(/^export /gm, '');
+  const policiesSource = fs.readFileSync(path.join(root, 'src/core/session-policies.mjs'), 'utf8')
+    .replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
+  vm.runInContext(`Object.assign(globalThis, (() => { ${routerSource}\n${policiesSource}\nreturn { buildSessionRouterFromOverrides, sessionPolicyFingerprint }; })());`, context);
   vm.runInContext(source + '\nglobalThis.auditReady = main();', context);
   const bridge = await context.auditReady;
   bridge.setPresets(['standard', 'qq-chat', 'qq-chat-v2']);
