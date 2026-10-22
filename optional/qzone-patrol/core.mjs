@@ -7,21 +7,28 @@ import { PatrolError, withState } from './state.mjs';
 
 export const CANDIDATE_TTL_MS = 30 * 60 * 1000;
 export const DEFAULT_STATE_DIR = path.join(ROOT, 'state', 'optional', 'qzone-patrol');
-const userId = value => typeof value === 'string' && /^[1-9]\d{0,15}$/.test(value)
+export const userId = value => typeof value === 'string' && /^[1-9]\d{0,15}$/.test(value)
   && Number.isSafeInteger(Number(value));
 const fail = (code, message) => { throw new PatrolError(code, message); };
 const actionKey = (candidate, kind) => createHash('sha256')
   .update(JSON.stringify([candidate.uin, candidate.tid, kind])).digest('hex');
-const sourceKey = config => createHash('sha256')
+export const sourceKey = config => createHash('sha256')
   .update(JSON.stringify([origin(config.baseUrl), config.accessTokenEnv])).digest('hex');
-const accountKey = uin => createHash('sha256').update(uin).digest('hex');
-const writePolicy = config => JSON.stringify([
+export const accountKey = uin => createHash('sha256').update(uin).digest('hex');
+export const writePolicy = config => JSON.stringify([
   config.enabled, config.dryRun, config.allowLikes, config.allowComments,
   [...new Set(config.allowedUsers)].sort(), [...new Set(config.blockedUsers)].sort(),
   sourceKey(config), config.dailyLikeLimit, config.dailyCommentLimit, config.hourlyLimit,
   config.cooldownMinutes, config.maxPostAgeHours,
   config.quietHours.start, config.quietHours.end, config.quietHours.timeZone,
+  config.allowReplies, config.allowPosts, config.dailyReplyLimit, config.replyPerPostLimit,
+  config.replyPerPersonLimit, config.replyMinGapSeconds, config.dailyPostLimit,
+  config.postPerMinuteLimit, config.imageDirs, config.imageMaxBytes,
 ]);
+export const WATCHER_DEFAULTS = {
+  enabled: false, dryRun: true, intervalMinutes: 10, dailyAt: '21:00',
+  bridgeUrl: 'http://127.0.0.1:3100', bridgeTokenEnv: 'QQ_BRIDGE_CONSOLE_TOKEN', sessionKey: '',
+};
 
 function origin(value) {
   let url;
@@ -35,7 +42,14 @@ function origin(value) {
 
 export function validatePatrolConfig(config) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) fail('config_invalid', '巡逻配置无效');
-  for (const key of ['enabled', 'dryRun', 'allowLikes', 'allowComments']) {
+  config = {
+    allowReplies: false, allowPosts: false, dailyReplyLimit: 10, replyPerPostLimit: 3,
+    replyPerPersonLimit: 1, replyMinGapSeconds: 60, dailyPostLimit: 20, postPerMinuteLimit: 3,
+    imageDirs: [], imageMaxBytes: 8 * 1024 * 1024, ...config,
+  };
+  if (Object.hasOwn(config, 'watcher') && (!config.watcher || typeof config.watcher !== 'object' || Array.isArray(config.watcher))) fail('config_invalid', '守望者配置无效');
+  config.watcher = { ...WATCHER_DEFAULTS, ...config.watcher };
+  for (const key of ['enabled', 'dryRun', 'allowLikes', 'allowComments', 'allowReplies', 'allowPosts']) {
     if (typeof config[key] !== 'boolean') fail('config_invalid', '巡逻开关必须为 true 或 false');
   }
   for (const key of ['allowedUsers', 'blockedUsers']) {
@@ -46,9 +60,24 @@ export function validatePatrolConfig(config) {
   for (const [key, min, max] of [
     ['dailyLikeLimit', 0, 200], ['dailyCommentLimit', 0, 50], ['hourlyLimit', 0, 100],
     ['cooldownMinutes', 0, 1440], ['scanPageSize', 1, 50], ['maxPostAgeHours', 1, 720],
+    ['dailyReplyLimit', 0, 100], ['replyPerPostLimit', 0, 20], ['replyPerPersonLimit', 0, 10],
+    ['replyMinGapSeconds', 60, 86400], ['dailyPostLimit', 0, 200], ['postPerMinuteLimit', 0, 3],
+    ['imageMaxBytes', 1, 8 * 1024 * 1024],
   ]) {
     if (!Number.isSafeInteger(config[key]) || config[key] < min || config[key] > max) fail('config_invalid', '巡逻数量或时间限制无效');
   }
+  if (!Array.isArray(config.imageDirs) || config.imageDirs.some(p => typeof p !== 'string' || !path.isAbsolute(p))) {
+    fail('config_invalid', '配图允许目录必须是绝对路径数组');
+  }
+  const w = config.watcher;
+  if (typeof w.enabled !== 'boolean' || typeof w.dryRun !== 'boolean'
+      || !Number.isSafeInteger(w.intervalMinutes) || w.intervalMinutes < 5 || w.intervalMinutes > 1440
+      || typeof w.dailyAt !== 'string' || (w.dailyAt && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(w.dailyAt))
+      || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(w.bridgeTokenEnv ?? '')
+      || typeof w.sessionKey !== 'string'
+      || (w.sessionKey && (!/^private:[1-9]\d{0,15}$/.test(w.sessionKey) || !Number.isSafeInteger(Number(w.sessionKey.slice(8)))))
+      || (w.enabled && !w.sessionKey)) fail('config_invalid', '守望者开关、时间或目标会话无效');
+  origin(w.bridgeUrl);
   const q = config.quietHours;
   if (!q || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(q.start ?? '')
       || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(q.end ?? '') || typeof q.timeZone !== 'string') {
@@ -59,7 +88,7 @@ export function validatePatrolConfig(config) {
   return config;
 }
 
-function calendar(at, zone) {
+export function calendar(at, zone) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
     timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
@@ -74,19 +103,21 @@ export function isQuiet(config, at) {
   return a === b ? false : a < b ? current >= a && current < b : current >= a || current < b;
 }
 
-function counts(state, config, at) {
+export function counts(state, config, at) {
   const records = Object.values(state.actions);
   const today = calendar(at, config.quietHours.timeZone).date;
   const daily = records.filter(action => calendar(action.at, config.quietHours.timeZone).date === today);
   return {
     likes: daily.filter(action => action.kind === 'like').length,
     comments: daily.filter(action => action.kind === 'comment').length,
+    replies: daily.filter(action => action.kind === 'reply').length,
+    posts: daily.filter(action => action.kind === 'post').length,
     hourly: records.filter(action => at - action.at < 3600000).length,
     lastActionAt: records.reduce((last, action) => Math.max(last, action.at), 0),
   };
 }
 
-function allowed(config, uin) {
+export function allowed(config, uin) {
   return config.allowedUsers.includes(uin) && !config.blockedUsers.includes(uin);
 }
 
@@ -96,14 +127,14 @@ function list(data) {
   return result;
 }
 
-function plain(value) {
+export function plain(value) {
   return String(value ?? '').replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
     .replace(/<br\s*\/?>|<\/(?:div|p)>/gi, '\n').replace(/<[^>]*>/g, '')
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&nbsp;/g, ' ').trim().slice(0, 600);
 }
 
-async function defaultRequest(action, payload, config) {
+export async function defaultRequest(action, payload, config) {
   let token = String(process.env[config.accessTokenEnv] || '').trim();
   if (!token) {
     try {
@@ -185,7 +216,7 @@ export function createPatrol({ getConfig, stateDir = DEFAULT_STATE_DIR, requestO
     const picked = posts.sort((a, b) => b.time - a.time).slice(0, cfg.scanPageSize);
     const items = await withState(stateDir, state => {
       for (const [id, candidate] of Object.entries(state.candidates)) {
-        if (candidate.expiresAt <= at || !allowed(cfg, candidate.uin)) delete state.candidates[id];
+        if (candidate.expiresAt <= at || !allowed(cfg, candidate.kind === 'reply' ? candidate.commentUin : candidate.uin)) delete state.candidates[id];
       }
       const result = picked.map(post => {
         const old = Object.entries(state.candidates).find(([, candidate]) => candidate.uin === post.uin && candidate.tid === post.tid);
@@ -218,6 +249,7 @@ export function createPatrol({ getConfig, stateDir = DEFAULT_STATE_DIR, requestO
     }
     const reservation = await withState(stateDir, state => {
       const candidate = state.candidates[candidateId];
+      if (candidate?.kind === 'reply') fail('candidate_invalid', '评论回复候选只能用于精准回复工具');
       if (!candidate || candidate.expiresAt <= at || at - candidate.time * 1000 > cfg.maxPostAgeHours * 3600000) {
         fail('candidate_expired', '候选不存在或已过期，请先重新扫描');
       }
@@ -279,9 +311,11 @@ export function createPatrol({ getConfig, stateDir = DEFAULT_STATE_DIR, requestO
     const at = now();
     return withState(stateDir, state => ({
       enabled: cfg.enabled, dryRun: cfg.dryRun, allowLikes: cfg.allowLikes, allowComments: cfg.allowComments,
+      allowReplies: cfg.allowReplies, allowPosts: cfg.allowPosts,
       quiet: isQuiet(cfg, at), timeZone: cfg.quietHours.timeZone,
       counts: counts(state, cfg, at),
-      limits: { dailyLikes: cfg.dailyLikeLimit, dailyComments: cfg.dailyCommentLimit, hourly: cfg.hourlyLimit },
+      limits: { dailyLikes: cfg.dailyLikeLimit, dailyComments: cfg.dailyCommentLimit,
+        dailyReplies: cfg.dailyReplyLimit, dailyPosts: cfg.dailyPostLimit, hourly: cfg.hourlyLimit },
       lastScanAt: state.lastScanAt, lastScanCount: state.lastScanCount,
       activeCandidates: Object.values(state.candidates).filter(candidate => candidate.account
         && candidate.source === sourceKey(cfg) && candidate.expiresAt > at && allowed(cfg, candidate.uin)).length,

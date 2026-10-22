@@ -26,12 +26,27 @@ function validState(state) {
     /^[a-f0-9-]{36}$/.test(id) && object(c) && typeof c.uin === 'string' && /^[1-9]\d{0,15}$/.test(c.uin)
       && Number.isSafeInteger(Number(c.uin)) && typeof c.tid === 'string' && c.tid.length > 0 && c.tid.length <= 200
       && digest(c.source) && (c.account === undefined || digest(c.account))
+      && (c.kind === undefined || (c.kind === 'reply'
+        && digest(c.account)
+        && typeof c.commentId === 'string' && c.commentId.length > 0 && c.commentId.length <= 200
+        && typeof c.commentUin === 'string' && /^[1-9]\d{0,15}$/.test(c.commentUin)
+        && Number.isSafeInteger(Number(c.commentUin))))
       && time(c.time) && time(c.seenAt) && time(c.expiresAt))) return false;
   if (!Object.entries(state.actions).every(([key, a]) => digest(key) && object(a)
-      && ['like', 'comment'].includes(a.kind) && time(a.at)
+      && ['like', 'comment', 'reply', 'post'].includes(a.kind) && time(a.at)
+      && (a.account === undefined || digest(a.account))
+      && (a.postKey === undefined || digest(a.postKey)) && (a.personKey === undefined || digest(a.personKey))
+      && (a.kind !== 'reply' || (digest(a.account) && digest(a.postKey) && digest(a.personKey)))
+      && (a.kind !== 'post' || digest(a.account))
       && ['reserved', 'succeeded', 'unknown'].includes(a.status))) return false;
+  const watcher = state.watcher;
+  if (watcher !== undefined && (!object(watcher) || !object(watcher.baselines) || !object(watcher.notifications) || !object(watcher.lastRuns)
+      || !Object.entries(watcher.baselines).every(([key, at]) => digest(key) && time(at))
+      || !Object.entries(watcher.lastRuns).every(([key, date]) => digest(key) && /^\d{4}-\d{2}-\d{2}$/.test(date))
+      || !Object.entries(watcher.notifications).every(([key, item]) => digest(key) && object(item)
+        && time(item.at) && ['baseline', 'reserved', 'delivered', 'unknown'].includes(item.status)))) return false;
   return state.dryRuns.every(a => object(a) && digest(a.key)
-    && ['like', 'comment'].includes(a.kind) && time(a.at));
+    && ['like', 'comment', 'reply', 'post'].includes(a.kind) && time(a.at));
 }
 
 async function readState(file) {
@@ -139,4 +154,8 @@ export async function withState(dir, callback, { write = false } = {}) {
 
 export function withRunnerLock(dir, callback) {
   return withLock(dir, 'runner.lock', callback);
+}
+
+export function withWatcherLock(dir, callback) {
+  return withLock(dir, 'watcher.lock', callback);
 }
