@@ -297,7 +297,11 @@ test('simultaneous writers cannot duplicate one action or exceed a shared quota'
     f.make().like({ candidateId: items[1].candidateId }),
   ]);
   assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
-  assert.deepEqual(results.filter(result => result.status === 'rejected').map(result => result.reason.code).sort(), ['already_reserved', 'quota_exhausted']);
+  // Either candidate may acquire the lock first; B winning exhausts the quota for both A attempts.
+  const expectedErrors = results[2].status === 'fulfilled'
+    ? ['quota_exhausted', 'quota_exhausted']
+    : ['already_reserved', 'quota_exhausted'];
+  assert.deepEqual(results.filter(result => result.status === 'rejected').map(result => result.reason.code).sort(), expectedErrors);
   assert.equal(f.writes().length, 1);
 });
 
