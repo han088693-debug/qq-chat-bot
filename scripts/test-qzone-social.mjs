@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createSocial } from '../optional/qzone-patrol/social.mjs';
-import { createPatrol } from '../optional/qzone-patrol/core.mjs';
+import { createPatrol, sourceKey, accountKey } from '../optional/qzone-patrol/core.mjs';
 import { createPatrolServer } from '../optional/qzone-patrol/server.mjs';
 import { buildReplyRequest, parseReplyResponse } from '../optional/qzone-patrol/native-reply.mjs';
 
@@ -33,7 +34,7 @@ const fixture = async (t, patch = {}) => {
     }
     if (action === 'get_login_info') return { user_id: f.account };
     if (action === 'get_qzone_msg_list') return { msglist: [{ tid: 'own-post', time: f.now / 1000 - 60, content: '合成动态', comment_num: 1 }] };
-    if (action === 'get_qzone_msg_detail') return { tid: payload.tid, uin: payload.target_uin, comments: structuredClone(f.comments) };
+    if (action === 'get_qzone_msg_detail') return { tid: payload.tid, uin: payload.target_uin, content: '合成动态上下文', comments: structuredClone(f.comments) };
     if (action === 'get_cookies') return { cookies: `uin=o${f.account}; p_skey=fixture-only` };
     if (action === 'send_qzone_msg') return { tid: 'own-post' };
     throw new Error(`Unmocked action: ${action}`);
@@ -130,6 +131,121 @@ test('timeout and missing acknowledgment keep unknown reservation; content-only 
   assert.equal(Object.values((await f.state()).actions)[0].status, 'unknown');
   await assert.rejects(f.make().replyComment({ candidateId, content: '另一个说法' }), code('already_reserved'));
   assert.equal(f.replyCalls.length, 1);
+});
+
+test('explicit post owner binds candidates, reply transport and transient post context', async t => {
+  const f = await fixture(t, { allowReplies: true, dryRun: false, allowedUsers: ['202', '303'] });
+  const result = await f.social.postComments({ postId: 'other-post', targetUin: '303' });
+  assert.equal(result.targetUin, '303');
+  assert.equal(result.postText, '合成动态上下文');
+  const candidateId = result.items[0].candidateId;
+  assert.equal((await f.state()).candidates[candidateId].uin, '303');
+  await assert.rejects(f.social.replyComment({ candidateId, targetUin: '202', content: '合成回复' }), code('candidate_target_changed'));
+  const reply = await f.social.replyComment({ candidateId, targetUin: '303', content: '合成回复' });
+  assert.equal(reply.verified, true);
+  assert.equal(f.replyCalls[0].self, '101');
+  assert.equal(f.replyCalls[0].targetUin, '303');
+  assert.ok(f.calls.filter(c => c.action === 'get_qzone_msg_detail').every(c => c.payload.target_uin === 303));
+  assert.ok(!(await fs.readFile(path.join(f.dir, 'patrol-state.json'), 'utf8')).includes('合成动态上下文'));
+});
+
+test('comment reads reject unlisted owners and cannot turn ambiguous ownership into a reply candidate', async t => {
+  const f = await fixture(t, { allowReplies: true });
+  await assert.rejects(f.social.postComments({ postId: 'other-post', targetUin: '303' }), code('target_denied'));
+  assert.ok(!f.calls.some(c => c.action === 'get_qzone_msg_detail'));
+  f.cfg.allowedUsers.push('303');
+  for (const patch of [{ uin: undefined }, { tid: undefined }, { uin: '404' }, { tid: 'wrong-post' }, { is_private: true }]) {
+    f.hook = (action, payload) => action === 'get_qzone_msg_detail'
+      ? { tid: payload.tid, uin: payload.target_uin, comments: f.comments, ...patch } : undefined;
+    await assert.rejects(f.social.postComments({ postId: 'other-post', targetUin: '303' }), code('gateway_format'));
+  }
+  await assert.rejects(f.state(), error => error.code === 'ENOENT');
+  assert.equal(f.replyCalls.length, 0);
+});
+
+test('reply rechecks a bound owner and policy changes before dispatch', async t => {
+  const f = await fixture(t, { allowReplies: true, dryRun: false, allowedUsers: ['202', '303'] });
+  const candidateId = (await f.social.postComments({ postId: 'other-post', targetUin: '303' })).items[0].candidateId;
+  f.cfg.blockedUsers = ['303'];
+  await assert.rejects(f.social.replyComment({ candidateId, content: '合成回复' }), code('target_denied'));
+  f.cfg.blockedUsers = [];
+  f.hook = (action, payload) => action === 'get_qzone_msg_detail'
+    ? { tid: payload.tid, uin: '404', comments: f.comments } : undefined;
+  await assert.rejects(f.social.replyComment({ candidateId, content: '合成回复' }), code('gateway_format'));
+  f.hook = async action => {
+    if (action === 'get_login_info' && Object.values((await f.state()).actions).some(a => a.status === 'reserved')) {
+      f.cfg.allowedUsers = ['202'];
+    }
+  };
+  await assert.rejects(f.social.replyComment({ candidateId, content: '合成回复' }), code('config_changed'));
+  assert.equal(Object.values((await f.state()).actions)[0].status, 'unknown');
+  assert.equal(f.replyCalls.length, 0);
+});
+
+test('same identifiers on distinct allowed post owners keep separate durable reply identities', async t => {
+  const f = await fixture(t, { allowReplies: true, dryRun: false, allowedUsers: ['202', '303', '404'] });
+  f.replyHook = () => ({ acknowledged: true });
+  for (const targetUin of ['303', '404']) {
+    const candidateId = (await f.social.postComments({ postId: 'same-post', targetUin })).items[0].candidateId;
+    await f.social.replyComment({ candidateId, targetUin, content: '合成回复' });
+    f.now += 61000;
+  }
+  assert.equal(f.replyCalls.length, 2);
+  assert.equal(Object.keys((await f.state()).actions).length, 2);
+});
+
+test('own-post reservations from the previous release still prevent a duplicate reply', async t => {
+  const f = await fixture(t, { allowReplies: true, dryRun: false });
+  const candidateId = await f.candidate();
+  const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  const account = accountKey(f.account);
+  const state = await f.state();
+  state.actions[hash([sourceKey(f.cfg), account, 'own-post', 'c1', 'reply'])] = {
+    kind: 'reply', account, postKey: hash([account, 'own-post']), personKey: hash([account, 'own-post', '202']),
+    status: 'unknown', at: f.now,
+  };
+  await fs.writeFile(path.join(f.dir, 'patrol-state.json'), JSON.stringify(state));
+  await assert.rejects(f.make().replyComment({ candidateId, content: '合成回复' }), code('already_reserved'));
+  assert.equal(f.replyCalls.length, 0);
+  assert.equal(Object.keys((await f.state()).actions).length, 1);
+});
+
+test('readback can promote an unknown reply without retransmitting it', async t => {
+  const f = await fixture(t, { allowReplies: true, dryRun: false });
+  const candidateId = await f.candidate();
+  f.replyHook = input => {
+    f.comments[0].replies.push({ uin: f.account, content: input.content });
+    throw new Error('synthetic timeout');
+  };
+  const result = await f.social.replyComment({ candidateId, content: '合成回复' });
+  assert.equal(result.acknowledged, false);
+  assert.equal(result.verified, true);
+  assert.equal(result.uncertain, false);
+  assert.equal(result.retryAllowed, false);
+  assert.equal(Object.values((await f.state()).actions)[0].status, 'succeeded');
+  f.comments[0].replies = [];
+  await assert.rejects(f.make().replyComment({ candidateId, content: '另一种说法' }), code('already_reserved'));
+  assert.equal(f.replyCalls.length, 1);
+});
+
+test('readback rejects changed parent identity, missing ownership and a changed login account', async t => {
+  for (const change of ['parent', 'owner', 'account']) {
+    const f = await fixture(t, { allowReplies: true, dryRun: false });
+    const candidateId = await f.candidate();
+    f.replyHook = input => {
+      f.comments[0].replies.push({ uin: f.account, content: input.content });
+      if (change === 'parent') f.comments[0].uin = '303';
+      else if (change === 'owner') f.hook = action => action === 'get_qzone_msg_detail'
+        ? { tid: 'own-post', comments: f.comments } : undefined;
+      else f.account = '303';
+      return { acknowledged: false };
+    };
+    const result = await f.social.replyComment({ candidateId, content: '合成回复' });
+    assert.equal(result.verified, false);
+    assert.equal(result.uncertain, true);
+    assert.equal(Object.values((await f.state()).actions)[0].status, 'unknown');
+    assert.equal(f.replyCalls.length, 1);
+  }
 });
 
 test('reply rejects account changes, removed allowlists, expired candidates and comment identity changes', async t => {
@@ -262,6 +378,12 @@ test('native reply protocol requires matching cookie account and exact comment f
   assert.equal(body.get('commentId'), 'c1');
   assert.equal(body.get('commentUin'), '202');
   assert.equal(body.get('hostUin'), '101');
+  const targeted = new URLSearchParams(buildReplyRequest({ ...input, targetUin: '303' }).body);
+  assert.equal(targeted.get('uin'), '101');
+  assert.equal(targeted.get('hostUin'), '303');
+  assert.equal(targeted.get('topicId'), '303_fixture-post__1');
+  assert.equal(targeted.get('qzreferrer'), 'https://user.qzone.qq.com/303/main');
+  assert.throws(() => buildReplyRequest({ ...input, targetUin: 'invalid' }), code('target_invalid'));
   assert.throws(() => buildReplyRequest({ ...input, self: '303' }), code('cookie_account_invalid'));
   assert.deepEqual(parseReplyResponse(200, '{"code":0,"commentid":1}'), { acknowledged: true });
   assert.deepEqual(parseReplyResponse(200, '<html></html>'), { acknowledged: false });
@@ -286,5 +408,10 @@ test('MCP lists five reads and gates each added write independently', async t =>
     assert.equal((await client.listTools()).tools.length, 7);
     const invalid = await client.callTool({ name: 'qzone_reply_comment', arguments: { postId: 'guessed', content: '合成回复' } });
     assert.equal(invalid.isError, true);
+    const comments = await client.callTool({ name: 'qzone_post_comments', arguments: { postId: 'own-post', targetUin: '101' } });
+    assert.notEqual(comments.isError, true);
+    const candidateId = JSON.parse(comments.content[0].text).items[0].candidateId;
+    const reply = await client.callTool({ name: 'qzone_reply_comment', arguments: { candidateId, targetUin: '101', content: '合成回复' } });
+    assert.notEqual(reply.isError, true);
   } finally { await client.close(); await server.close(); }
 });

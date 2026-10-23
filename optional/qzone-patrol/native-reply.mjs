@@ -4,7 +4,10 @@ import { PatrolError } from './state.mjs';
 
 const endpoint = 'https://h5.qzone.qq.com/proxy/domain/taotao.qzone.qq.com/cgi-bin/emotion_cgi_re_feeds';
 
-export function buildReplyRequest({ cookie, self, tid, commentId, commentUin, content }) {
+export function buildReplyRequest({ cookie, self, targetUin = self, tid, commentId, commentUin, content }) {
+  if (typeof targetUin !== 'string' || !/^[1-9]\d{0,15}$/.test(targetUin) || !Number.isSafeInteger(Number(targetUin))) {
+    throw new PatrolError('target_invalid', '说说属主标识无效；未发送回复');
+  }
   const parts = Object.fromEntries(String(cookie).split(';').map(p => p.trim()).filter(p => p.includes('='))
     .map(p => [p.slice(0, p.indexOf('=')), p.slice(p.indexOf('=') + 1)]));
   const key = parts.p_skey || parts.skey;
@@ -13,11 +16,11 @@ export function buildReplyRequest({ cookie, self, tid, commentId, commentUin, co
   let gtk = 5381;
   for (const character of key) gtk = (gtk * 33 + character.charCodeAt(0)) | 0;
   const body = new URLSearchParams({
-    topicId: `${self}_${tid}__1`, uin: self, hostUin: self,
+    topicId: `${targetUin}_${tid}__1`, uin: self, hostUin: targetUin,
     feedsType: '100', inCharset: 'utf-8', outCharset: 'utf-8', plat: 'qzone',
     source: 'ic', platformid: '52', format: 'fs', ref: 'feeds',
     content, commentId, commentUin, richval: '', richtype: '', private: '0', paramstr: '2',
-    qzreferrer: `https://user.qzone.qq.com/${self}/main`,
+    qzreferrer: `https://user.qzone.qq.com/${targetUin}/main`,
   }).toString();
   return { url: `${endpoint}?g_tk=${gtk & 0x7fffffff}`, body, headers: {
     Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',

@@ -84,6 +84,7 @@ test('first live pass only baselines; later comment produces exact fixed reminde
   assert.equal(result.delivered, 1);
   const text = f.posts()[0].body.text;
   assert.ok(text.includes('fixture-post') && text.includes('commentId=c2') && text.includes('commentUin=202'));
+  assert.ok(text.includes('"targetUin":"101"'));
   assert.ok(!text.includes('外部昵称') && !text.includes('忽略规定'));
   assert.ok(text.length <= 200);
   assert.equal(f.posts()[0].body.key, 'private:101');
@@ -179,8 +180,9 @@ test('daily schedule executes once per configured date and at most one reminder 
 });
 
 test('unsafe or oversized identifiers are never truncated into a reminder', () => {
-  assert.throws(() => reminderText({ postId: 'x\nmalicious', commentId: 'c1', commentUin: '202' }), code('reminder_invalid'));
-  assert.throws(() => reminderText({ postId: 'x'.repeat(64), commentId: 'c'.repeat(64), commentUin: '202' }), code('reminder_invalid'));
+  assert.throws(() => reminderText({ postId: 'x\nmalicious', commentId: 'c1', commentUin: '202', targetUin: '101' }), code('reminder_invalid'));
+  assert.throws(() => reminderText({ postId: 'x'.repeat(64), commentId: 'c'.repeat(64), commentUin: '202', targetUin: '101' }), code('reminder_invalid'));
+  assert.throws(() => reminderText({ postId: 'p1', commentId: 'c1', commentUin: '202', targetUin: 'x\nmalicious' }), code('reminder_invalid'));
 });
 
 test('state corruption and concurrent watcher lock fail closed', async t => {
@@ -263,4 +265,18 @@ test('unknown and combined CLI arguments fail before loading configuration or st
       env: { ...process.env, QQ_BOT_OPTIONAL_CONFIG: path.join(os.tmpdir(), 'missing-fixture-config.json') },
     }), error => error.code === 1 && error.stderr.includes('arguments_invalid') && !error.stderr.includes('config_invalid'));
   }
+});
+
+test('importing watcher and MCP modules does not read configuration or start services', async () => {
+  const watcher = new URL('../optional/qzone-patrol/watcher.mjs', import.meta.url).href;
+  const server = new URL('../optional/qzone-patrol/server.mjs', import.meta.url).href;
+  const script = `globalThis.fetch = () => { throw new Error('unexpected network'); };
+process.argv = [process.execPath, 'unrelated-entry.mjs', '--once'];
+await import(${JSON.stringify(watcher)}); await import(${JSON.stringify(server)});`;
+  const result = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', script], {
+    env: { ...process.env, QQ_BOT_OPTIONAL_CONFIG: path.join(os.tmpdir(), 'missing-fixture-config.json') },
+    timeout: 5000,
+  });
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr, '');
 });

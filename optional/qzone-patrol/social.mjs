@@ -11,6 +11,15 @@ import { buildReplyRequest, sendNativeReply } from './native-reply.mjs';
 
 const fail = (code, message) => { throw new PatrolError(code, message); };
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const replyRecord = (cfg, account, candidate) => {
+  // Keep existing own-post keys so an upgrade cannot resend an earlier reply.
+  const scope = candidate.uin === account ? [accountKey(account), candidate.tid]
+    : [accountKey(account), candidate.uin, candidate.tid];
+  return {
+    key: digest([sourceKey(cfg), ...scope, candidate.commentId, 'reply']), account: accountKey(account),
+    postKey: digest(scope), personKey: digest([...scope, candidate.commentUin]),
+  };
+};
 const id = value => typeof value === 'string' && value.length > 0 && value.length <= 200 && !/[\x00-\x20]/.test(value);
 const list = data => {
   if (!Array.isArray(data?.msglist)) fail('gateway_format', '网关没有返回可识别的动态列表');
@@ -125,50 +134,54 @@ export function createSocial({
         commentCount: Number.isSafeInteger(p.comment_num) && p.comment_num >= 0 ? p.comment_num : null,
       })) };
   }
-  async function detail(tid, account, cfg) {
-    const data = await request('get_qzone_msg_detail', { tid, target_uin: Number(account), pos: 0, num: 50 }, cfg);
+  async function detail(tid, target, cfg, requireOwner = false) {
+    const data = await request('get_qzone_msg_detail', { tid, target_uin: Number(target), pos: 0, num: 50 }, cfg);
     if (!data || !Array.isArray(data.comments) || data.is_private === true
         || (data.tid != null && String(data.tid) !== tid)
-        || (data.uin != null && String(data.uin) !== account)) {
+        || (data.uin != null && String(data.uin) !== target)
+        || (requireOwner && (String(data.tid ?? '') !== tid || String(data.uin ?? '') !== target))) {
       fail('gateway_format', '无法确认说说归属及评论列表；不会创建回复候选');
     }
-    return data.comments;
+    return data;
   }
   async function comments(input = {}) {
-    if (!id(input.postId)) fail('post_invalid', '需要读取自己说说返回的 postId');
+    if (!id(input.postId)) fail('post_invalid', '需要读取说说返回的 postId');
     const cfg = await config();
     await withState(stateDir, () => {});
     const account = await self(cfg);
-    const raw = await detail(input.postId, account, cfg);
+    const target = input.targetUin ?? account;
+    if (!userId(target) || (target !== account && !allowed(cfg, target))) fail('target_denied', '说说属主不在空间允许名单中');
+    const data = await detail(input.postId, target, cfg, target !== account);
     await unchanged(cfg, account);
     const at = now();
     return withState(stateDir, state => {
       for (const [key, candidate] of Object.entries(state.candidates)) {
         if (candidate.expiresAt <= at) delete state.candidates[key];
       }
-      const items = raw.slice(0, 50).filter(c => id(String(c?.comment_id ?? c?.commentId ?? '')))
+      const items = data.comments.slice(0, 50).filter(c => id(String(c?.comment_id ?? c?.commentId ?? '')))
         .map(c => {
           const commentId = String(c.comment_id ?? c.commentId);
           const commentUin = String(c.uin ?? '');
           const time = Number(c.time);
           const known = (c.replies || []).some(r => String(r.uin) === account);
           let candidateId = null;
-          const action = digest([sourceKey(cfg), accountKey(account), input.postId, commentId, 'reply']);
+          const action = replyRecord(cfg, account, { uin: target, tid: input.postId, commentId, commentUin }).key;
           const eligible = userId(commentUin) && commentUin !== account && allowed(cfg, commentUin)
             && Number.isSafeInteger(time) && time > 0 && time * 1000 <= at + 60000
             && at - time * 1000 <= cfg.maxPostAgeHours * 3600000 && !known && !state.actions[action];
           if (eligible) {
             candidateId = Object.entries(state.candidates).find(([, candidate]) => candidate.kind === 'reply'
               && candidate.account === accountKey(account) && candidate.source === sourceKey(cfg)
-              && candidate.tid === input.postId && candidate.commentId === commentId && candidate.commentUin === commentUin)?.[0] || randomUUID();
+              && candidate.uin === target && candidate.tid === input.postId
+              && candidate.commentId === commentId && candidate.commentUin === commentUin)?.[0] || randomUUID();
             state.candidates[candidateId] = {
-              kind: 'reply', uin: account, tid: input.postId, commentId, commentUin, time,
+              kind: 'reply', uin: target, tid: input.postId, commentId, commentUin, time,
               source: sourceKey(cfg), account: accountKey(account), seenAt: at, expiresAt: at + CANDIDATE_TTL_MS,
             };
           }
           return { commentId, commentUin, text: plain(c.content), candidateId, alreadyReplied: known || Boolean(state.actions[action]) };
         });
-      return { postId: input.postId, items, candidateTtlMinutes: 30 };
+      return { targetUin: target, postId: input.postId, postText: plain(data.content), items, candidateTtlMinutes: 30 };
     }, { write: true });
   }
   async function reserve(kind, cfg, record, candidate, at) {
@@ -178,7 +191,10 @@ export function createSocial({
         if (!saved || saved.expiresAt <= at || saved.account !== record.account
             || saved.source !== sourceKey(cfg) || saved.kind !== 'reply'
             || at - saved.time * 1000 > cfg.maxPostAgeHours * 3600000) fail('candidate_expired', '回复候选已过期或账号/来源改变');
-        if (!allowed(cfg, saved.commentUin)) fail('target_denied', '评论者已不在允许范围内');
+        if (!allowed(cfg, saved.commentUin)
+            || (accountKey(saved.uin) !== record.account && !allowed(cfg, saved.uin))) {
+          fail('target_denied', '说说属主或评论者已不在允许范围内');
+        }
       }
       if (state.actions[record.key]) fail('already_reserved', '该动作已处理或结果未明；不会重复提交');
       const used = counts(state, cfg, at);
@@ -217,20 +233,19 @@ export function createSocial({
     const candidate = await withState(stateDir, state => state.candidates[input.candidateId]);
     if (!candidate || candidate.kind !== 'reply') fail('candidate_invalid', '必须使用评论扫描返回的回复 candidateId');
     const account = await self(cfg);
-    if (candidate.account !== accountKey(account) || candidate.uin !== account) fail('candidate_account_changed', '回复候选不属于当前登录账号');
-    const latest = await detail(candidate.tid, account, cfg);
-    const parent = latest.find(c => String(c.comment_id ?? c.commentId) === candidate.commentId && String(c.uin) === candidate.commentUin);
+    if (candidate.account !== accountKey(account)) fail('candidate_account_changed', '回复候选不属于当前登录账号');
+    if (input.targetUin !== undefined && input.targetUin !== candidate.uin) fail('candidate_target_changed', '指定的说说属主与回复候选不一致');
+    const target = candidate.uin;
+    if (target !== account && !allowed(cfg, target)) fail('target_denied', '说说属主已不在允许范围内');
+    const latest = await detail(candidate.tid, target, cfg, target !== account);
+    const parent = latest.comments.find(c => String(c.comment_id ?? c.commentId) === candidate.commentId && String(c.uin) === candidate.commentUin);
     if (!parent || (parent.replies || []).some(r => String(r.uin) === account)) fail('candidate_invalid', '评论不存在、作者变化或账号已回复');
-    const record = {
-      key: digest([sourceKey(cfg), candidate.account, candidate.tid, candidate.commentId, 'reply']),
-      account: candidate.account, postKey: digest([candidate.account, candidate.tid]),
-      personKey: digest([candidate.account, candidate.tid, candidate.commentUin]),
-    };
+    const record = replyRecord(cfg, account, candidate);
     let cookie = '';
     if (!cfg.dryRun) {
       const data = await request('get_cookies', { domain: 'qzone.qq.com' }, cfg);
       cookie = typeof data === 'string' ? data : data?.cookies;
-      buildReplyRequest({ cookie, self: account, tid: candidate.tid, commentId: candidate.commentId, commentUin: candidate.commentUin, content });
+      buildReplyRequest({ cookie, self: account, targetUin: target, tid: candidate.tid, commentId: candidate.commentId, commentUin: candidate.commentUin, content });
     }
     await unchanged(cfg, account);
     await reserve('reply', cfg, record, { ...candidate, id: input.candidateId }, now());
@@ -239,15 +254,18 @@ export function createSocial({
     try {
       await unchanged(cfg, account);
       if (candidate.expiresAt <= now()) fail('candidate_expired', '回复候选在提交前已过期');
-      acknowledged = Boolean((await requestReply({ cookie, self: account, tid: candidate.tid, commentId: candidate.commentId, commentUin: candidate.commentUin, content }))?.acknowledged);
+      acknowledged = Boolean((await requestReply({ cookie, self: account, targetUin: target, tid: candidate.tid, commentId: candidate.commentId, commentUin: candidate.commentUin, content }))?.acknowledged);
     } catch (error) {
       if (error instanceof PatrolError && !['reply_unknown', 'gateway_failed'].includes(error.code)) throw error;
     } finally { await finish(record.key, acknowledged); }
     try {
-      const rows = await detail(candidate.tid, account, cfg);
-      const row = rows.find(c => String(c.comment_id ?? c.commentId) === candidate.commentId);
+      await unchanged(cfg, account);
+      const data = await detail(candidate.tid, target, cfg, true);
+      await unchanged(cfg, account);
+      const row = data.comments.find(c => String(c.comment_id ?? c.commentId) === candidate.commentId && String(c.uin) === candidate.commentUin);
       verified = Boolean(row?.replies?.some(r => String(r.uin) === account && String(r.content).trim() === content));
     } catch {}
+    if (verified && !acknowledged) await finish(record.key, true);
     return { ok: acknowledged || verified, acknowledged, verified, uncertain: !acknowledged && !verified, retryAllowed: false };
   }
   async function post(input = {}) {
