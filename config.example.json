@@ -215,7 +215,26 @@
         "enabled": true,
         "maxPerMinute": 2,
         "maxPerHour": 10,
-        "maxRemarkChars": 20
+        "maxRemarkChars": 20,
+        "maxPerDay": 10
+      },
+      "external": {
+        "enabled": true,
+        "transport": "base64",
+        "promptMax": 3,
+        "maxPerHourPerChat": 6,
+        "maxPerDayPerChat": 30
+      },
+      "taste": {
+        "enabled": true,
+        "collectHint": true,
+        "maxCandidates": 3,
+        "hourLimit": 3,
+        "dayLimit": 10
+      },
+      "native": {
+        "qqCustomFace": "off",
+        "externalSubType1": "off"
       }
     },
     "voice": {
@@ -263,7 +282,16 @@
       "maxSeconds": 120,
       "timeoutMs": 90000
     },
-    "sessionPolicies": {}
+    "sessionPolicies": {},
+    "crossMemory": {
+      "enabled": false,
+      "ttlHours": 48,
+      "maxPeople": 3,
+      "includeOwnerSource": false,
+      "recordOnly": true,
+      "maxCharsPerPerson": 220,
+      "maxBlockChars": 800
+    }
   },
   "webSearch": {
     "provider": "auto",
