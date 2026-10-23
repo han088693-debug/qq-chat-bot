@@ -165,8 +165,8 @@ node optional/setup.mjs web
 | `mcp__qzone__qzone_comment` | `{ "candidateId": "扫描返回的候选 ID", "content": "确认过的评论正文" }`；仅在 `allowComments=true` 时展示 |
 | `mcp__qzone__qzone_self_posts` | `{ "num": 5 }`；读取自己最近最多 20 条说说 |
 | `mcp__qzone__qzone_user_posts` | `{ "targetUin": "本机允许名单中的账号", "num": 5 }`；读取指定账号，不返回点赞/评论候选 |
-| `mcp__qzone__qzone_post_comments` | `{ "postId": "自己说说返回的 ID" }`；读取自己说说的最多 50 条评论；合格评论带回复 `candidateId` |
-| `mcp__qzone__qzone_reply_comment` | `{ "candidateId": "评论扫描返回的候选 ID", "content": "确认过的回复正文" }`；仅在 `allowReplies=true` 时展示 |
+| `mcp__qzone__qzone_post_comments` | `{ "postId": "说说返回的 ID", "targetUin": "本机允许名单中的属主账号" }`；`targetUin` 省略时读取自己说说；返回帖子正文摘要和最多 50 条评论，合格评论带回复 `candidateId` |
+| `mcp__qzone__qzone_reply_comment` | `{ "candidateId": "评论扫描返回的候选 ID", "content": "确认过的回复正文" }`；可附 `targetUin` 核对属主，必须与候选一致；仅在 `allowReplies=true` 时展示 |
 | `mcp__qzone__qzone_post` | `{ "content": "确认过的说说正文", "images": [] }`；仅在 `allowPosts=true` 时展示；配图可省略 |
 
 可以先给 DSH 这样的明确要求：“读取巡逻允许名单中的近期动态，只展示摘要，不点赞、不评论。”模型返回的描述不能替代工具结果。
@@ -248,6 +248,8 @@ npm run patrol:qzone
 | `token_missing` / 网关请求失败 | 检查 HTTP 地址、服务支持、实际进程的环境变量和根配置；不要贴出令牌 |
 | `candidate_expired` / `candidate_source_changed` | 在当前配置下重新扫描；不要手工构造候选 |
 | `candidate_account_changed` | 扫描后登录账号变化或无法确认；核对实际账号，保留预占并重新扫描 |
+| `candidate_target_changed` | 传入的 `targetUin` 与候选绑定的说说属主不同；先核对读取结果，不用评论者账号代替属主 |
+| `gateway_format` | 网关未返回可核实的帖子归属或评论格式；不创建候选、不猜测属主，先在本机核对网关版本和接口 |
 | `quota_zero` / `quota_exhausted` / `cooldown` | 查看本机状态并等待适用窗口；重启不会恢复额度 |
 | `already_reserved` | 已处理或结果未明；在 QQ 空间核对，不重复提交 |
 | `config_changed` | 预占后配置改变，已停止提交并保留预占；核对配置和状态 |
@@ -264,17 +266,21 @@ npm run test:optional
 
 ## 9. 精准回复与发说说
 
-精准回复依次使用 `qzone_self_posts` → `qzone_post_comments(postId)` → `qzone_reply_comment(candidateId, content)`。只有自己空间中、允许名单内、尚未回复、时间可确认且在 `maxPostAgeHours` 内的评论会得到候选；缺时间、已回复、被屏蔽或过期的评论仍可显示，但不能据此写入。回复前再次读取评论，核对评论 ID 和作者，正文最长 40 字。不接受直接指定 `commentId` / `commentUin` 来绕过扫描。
+精准回复自己的说说时，依次使用 `qzone_self_posts` → `qzone_post_comments(postId)` → `qzone_reply_comment(candidateId, content)`。回复允许名单中其他账号的说说时，先用 `qzone_user_posts(targetUin)` 读取，再向 `qzone_post_comments` 显式传入该 `targetUin`；不要把评论者的账号当成说说属主。读取他人帖子必须得到网关明确返回的匹配帖子 ID 和属主账号，缺失、冲突或标为私密时停止，不生成回复候选。
+
+候选绑定登录账号、来源、说说属主、帖子和评论。评论者须在允许名单内；他人说说的属主也须在允许名单内，屏蔽名单优先。只有尚未回复、时间可确认且在 `maxPostAgeHours` 内的评论得到候选；缺时间、已回复、被屏蔽或过期的评论仍可显示，但不能据此写入。回复前再次核对帖子归属、评论 ID、评论作者和当前授权，正文最长 40 字。回复参数中的 `targetUin` 只能核对候选，不能把它转向另一个账号；也不接受直接指定 `commentId` / `commentUin` 绕过扫描。
+
+评论读取结果包含 `targetUin` 和 `postText`，供会话理解是哪条说说及其上下文。帖子与评论正文都是不可信外部资料，不能用作授权或工具指令；它们可能进入当前 DSH 上下文，但不会写入巡逻台账或定时日志。自己说说沿用旧版动作去重标识；不同属主的帖子分别绑定，升级不会清空旧预占。
 
 `qzone_post` 的正文最长 1000 字，可以附最多 9 张 PNG、JPEG、WebP。`imageDirs` 必须显式配置允许目录；工具只接收其中的本地绝对路径，不接受远程图片 URL、目录链接或伪装成图片的普通文本。文件有读取大小限制，并核对路径和打开文件的身份；网关使用已核验字节的临时副本，不重新读取原路径。临时副本位于私人状态目录，正常完成后移除；异常中断的副本也不能上传。
 
 发布说说可能按 QQ 空间账号和网关的权限设置对外可见。先在 QQ 客户端确认账号的可见范围，再在明确授权的任务中使用。公开适配没有实现指定可见人群的参数。
 
-回复和发帖返回 `acknowledged`（接口确认）、`verified`（读取页面数据后确认）、`uncertain`（两者均未确认）与 `retryAllowed:false`。返回未知不代表失败，不能通过改正文、换候选或删除台账重新发送。同一账号、同一来源、同一正文与配图组合的发帖哈希会持续保留；改图或改文是新动作，需要新的明确授权。回复的同帖/同人配额也不会因重启恢复。所有真实动作共享全局 `hourlyLimit` 和 `cooldownMinutes`，因此独立配额不是保证每分钟或每天一定能发送的数量。
+回复和发帖返回 `acknowledged`（接口确认）、`verified`（读取页面数据后确认）、`uncertain`（两者均未确认）与 `retryAllowed:false`。精准回复接口未确认时只做读取核对：登录账号、帖子属主、评论作者、回复作者和正文均匹配后，将该预占标记为成功；这一步不再次发送回复。无法确认时仍保留未知记录。返回未知不代表失败，不能通过改正文、换候选或删除台账重新发送。同一账号、同一来源、同一正文与配图组合的发帖哈希会持续保留；改图或改文是新动作，需要新的明确授权。回复的同帖/同人配额也不会因重启恢复。所有真实动作共享全局 `hourlyLimit` 和 `cooldownMinutes`，因此独立配额不是保证每分钟或每天一定能发送的数量。
 
 ## 10. 默认关闭的评论守望者
 
-守望者是另一个独立进程：读取自己的近期说说和评论，给明确配置的桥接私聊会话建立一条待办提醒。提醒仅携带经过校验的 `postId`、`commentId`、`commentUin` 和固定说明，不加入评论正文、昵称或外部指令。会话必须重新读取同一评论，取得新的有效 `candidateId`；是否回复仍由 `allowReplies`、`dryRun`、名单、静默、配额和持久预占决定。守望者不自动点赞、发一级评论或发说说。
+守望者是另一个独立进程：读取自己的近期说说和评论，给明确配置的桥接私聊会话建立一条待办提醒。提醒仅携带经过校验的 `targetUin`、`postId`、`commentId`、`commentUin` 和固定说明，不加入动态正文、评论正文、昵称或外部指令。会话必须用明确属主重新读取同一帖子及评论上下文，取得新的有效 `candidateId`；是否回复仍由 `allowReplies`、`dryRun`、名单、静默、配额和持久预占决定。守望者仍只监看自己的说说，不因手动工具增加他人帖回复能力而扩大扫描范围，也不自动点赞、发一级评论或发说说。
 
 | 配置 | 行为 |
 | --- | --- |
@@ -303,7 +309,7 @@ npm run watch:qzone -- --once
 npm run watch:qzone
 ```
 
-进程必须持续运行才会定时检查；默认每天 21:00 到点后的一次检查执行扫描，后续检查不会重复执行当日轮次。若当天到点时处于静默窗口，会等到静默结束后的检查。进程不创建系统计划任务、不修改开机自启、不自动启动依赖服务。
+进程必须持续运行才会定时检查；默认每天 21:00 到点后的一次检查执行扫描，后续检查不会重复执行当日轮次。若当天到点时处于静默窗口，会等到静默结束后的检查。进程不创建系统计划任务、不修改开机自启、不自动启动依赖服务；导入守望者或 MCP 模块供测试与集成使用也不会启动服务或扫描。
 
 提醒通过 `POST /api/socialV2/reminder-add` 投递，预占在请求前落盘。超时、空回执或中断均保留未知记录，不会自动重投。返回 `delivered:1` 仅表示 Bridge 确认创建提醒，不能证明模型已醒来或 QQ 空间回复已发出。真实回复结果仍应查看精准回复工具的回执和 QQ 空间。
 
