@@ -71,7 +71,7 @@ async function gatewayInfo() {
   }
 }
 
-const server = new McpServer({ name: 'snowluma-host', version: '0.2.0-r4' });
+const server = new McpServer({ name: 'snowluma-host', version: '0.2.0-r5' });
 
 server.tool(
   'snowluma_status',
