@@ -145,7 +145,8 @@
         "collectSticker": true,
         "getSelfImage": true,
         "stickerNote": true,
-        "setStickerRemark": true
+        "setStickerRemark": true,
+        "sendVoice": true
       },
       "wake": {
         "defaultMode": "diving",
@@ -264,7 +265,8 @@
         "collectSticker": true,
         "getSelfImage": true,
         "stickerNote": true,
-        "setStickerRemark": true
+        "setStickerRemark": true,
+        "sendVoice": true
       },
       "wake": {
         "defaultMode": "diving",
@@ -411,7 +413,7 @@
   },
   {
     "method": "POST",
-    "path": "/api/slang",
+    "path": "/api/plugins/slang/add",
     "body": {
       "content": "测试词条",
       "meaning": "很棒",
@@ -434,7 +436,7 @@
   },
   {
     "method": "POST",
-    "path": "/api/slang/config",
+    "path": "/api/plugins/slang/config",
     "body": {
       "enabled": true,
       "extractMinMessages": 14,

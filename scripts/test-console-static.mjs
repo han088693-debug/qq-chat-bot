@@ -28,6 +28,14 @@ const views = [...new Set([...html.matchAll(/data-view="([a-z0-9-]+)"/g)].map((m
 const pages = [...new Set([...html.matchAll(/data-page="([a-z0-9-]+)"/g)].map((m) => m[1]))].sort();
 ok(JSON.stringify(views) === JSON.stringify(pages), 'data-view 与 data-page 一一对应', `${views.length} 个：${views.join(', ')}`);
 
+console.log('## 会话策略面板');
+for (const id of ['policyList', 'policyRefresh', 'policyStatus']) {
+  ok(ids.includes(id), `策略面板元素 ${id}`);
+}
+ok(/async function refreshPolicies\(\)/.test(html), 'refreshPolicies 已定义');
+ok(/api\('\/api\/socialV2\/policy\?key='/.test(html), '面板读取 /api/socialV2/policy');
+ok(/api\('\/api\/socialV2\/policy', 'POST'/.test(html), '面板保存 /api/socialV2/policy');
+
 console.log('## 工具开关');
 const tools = [...html.matchAll(/data-v2-tool="([A-Za-z]+)"/g)].map((m) => m[1]);
 ok(tools.includes('sendVoice'), 'sendVoice 开关存在', `共 ${tools.length} 个开关`);
@@ -70,6 +78,8 @@ if (!hasVoiceTool()) {
 
 console.log('## fixture mock 覆盖');
 const fixture = fs.readFileSync(path.join(ROOT, 'scripts', 'console-ui-fixture.mjs'), 'utf8');
+ok(fixture.includes("case '/api/health'"), 'fixture mock 了 /api/health');
+ok(fixture.includes("case '/api/socialV2/policy'"), 'fixture mock 了 /api/socialV2/policy');
 ok(fixture.includes("case '/api/socialV2/voices'"), 'fixture mock 了 /api/socialV2/voices');
 ok(fixture.includes("case '/api/voice/send'"), 'fixture mock 了 /api/voice/send');
 

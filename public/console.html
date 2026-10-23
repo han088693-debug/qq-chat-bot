@@ -75,6 +75,8 @@
   --danger-hover-bg:#ffebe8;
   --err:#bd3b3b;
   --ok:#168467;
+  --act-ai:#7a5cd6;
+  --act-sys:#a4661a;
   --pill-blue-bg:#edf1ff;
   --pill-blue-fg:#435de0;
   --pill-green-bg:#eaf7f1;
@@ -430,6 +432,122 @@ h1 {
   color:var(--muted);
   font-size:12px
 }
+/* 健康面板：把「会话忙 / 队列 / 上下文 / 今日花费 / 最近告警」压进一屏 */
+.health-cards {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:10px;
+  margin:14px 0 16px
+}
+.health-card {
+  border:1px solid var(--card-border);
+  border-radius:10px;
+  padding:10px 12px;
+  background:var(--surface-subtle);
+  min-width:0
+}
+.health-card>span {
+  display:block;
+  font-size:12px;
+  color:var(--muted)
+}
+.health-card strong {
+  display:block;
+  font-size:20px;
+  line-height:1.45;
+  color:var(--text-strong);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+.health-card small {
+  color:var(--muted-soft);
+  font-size:12px
+}
+.health-table-wrap {
+  overflow:auto
+}
+.health-table {
+  width:100%;
+  min-width:760px;
+  border-collapse:collapse;
+  font-size:13px
+}
+.health-table th,
+.health-table td {
+  text-align:left;
+  padding:8px 10px;
+  border-bottom:1px solid var(--border-subtle);
+  vertical-align:middle
+}
+.health-table th {
+  color:var(--muted);
+  font-weight:500;
+  font-size:12px
+}
+.health-table tr:last-child td {
+  border-bottom:0
+}
+/* 会话策略编辑：表格里直接改，不跳 JSON */
+.policy-table {
+  width:100%;
+  min-width:900px;
+  border-collapse:collapse;
+  font-size:13px
+}
+.policy-table th,
+.policy-table td {
+  text-align:left;
+  padding:8px 8px;
+  border-bottom:1px solid var(--border-subtle);
+  vertical-align:middle
+}
+.policy-table th {
+  color:var(--muted);
+  font-weight:500;
+  font-size:12px
+}
+.policy-table select,
+.policy-table input[type=text] {
+  max-width:150px
+}
+.health-ctx {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:170px
+}
+.health-bar {
+  height:6px;
+  flex:1;
+  background:var(--surface-chip-strong);
+  border-radius:99px;
+  overflow:hidden
+}
+.health-bar i {
+  display:block;
+  height:100%;
+  background:var(--accent);
+  border-radius:inherit
+}
+.health-bar i.warn {
+  background:var(--warn-fg-strong)
+}
+.health-bar i.bad {
+  background:var(--err)
+}
+.health-warnings {
+  margin-top:12px;
+  display:flex;
+  flex-direction:column;
+  gap:4px
+}
+.health-warnings .meta {
+  margin:0
+}
+.health-warnings .err {
+  color:var(--err)
+}
 .overview-summary {
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));
@@ -439,6 +557,10 @@ h1 {
   border-radius:var(--radius);
   margin-bottom:24px;
   padding:23px 0
+}
+/* 运行总览有 5 个指标：按 4 列排会把第 5 个挤成孤格，单独给成 5 列。 */
+#overviewSummary {
+  grid-template-columns:repeat(5,minmax(0,1fr))
 }
 .metric {
   padding:0 26px;
@@ -698,6 +820,291 @@ pre {
   grid-column:2;
   grid-row:1
 }
+/* 链路健康（运行总览）与运行日志（调试与运维） */
+#section-chain {
+  order:-1
+}
+.chain-strip {
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  margin-top:12px;
+  border:1px solid var(--card-border);
+  border-radius:10px;
+  overflow:hidden
+}
+.chain-hop {
+  min-width:0;
+  padding:12px 14px;
+  border-right:1px solid var(--card-border)
+}
+.chain-hop:last-child {
+  border-right:0
+}
+.chain-name {
+  display:block;
+  margin-bottom:6px;
+  overflow:hidden;
+  color:var(--muted);
+  font-size:12px;
+  white-space:nowrap;
+  text-overflow:ellipsis
+}
+.chain-state {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:14px;
+  font-weight:600
+}
+.chain-dot {
+  flex:0 0 auto;
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:var(--dot-offline)
+}
+.chain-hop.ok .chain-dot {
+  background:var(--ok)
+}
+.chain-hop.bad .chain-dot {
+  background:var(--err)
+}
+.chain-hop.ok .chain-state {
+  color:var(--ok)
+}
+.chain-hop.bad .chain-state {
+  color:var(--err)
+}
+.chain-ms {
+  display:block;
+  margin-top:4px;
+  color:var(--muted-soft);
+  font-size:12px
+}
+.log-view {
+  max-height:420px;
+  margin-top:10px;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere
+}
+.log-controls {
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:10px
+}
+.inline-check {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  margin:0;
+  color:var(--muted);
+  font-size:13px;
+  white-space:nowrap
+}
+.activity-toolbar {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px;
+  margin-top:12px
+}
+.activity-toolbar input[type="search"] {
+  flex:1 1 220px;
+  min-width:0
+}
+.activity-filters {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px
+}
+.activity-filters .tag {
+  margin:0;
+  padding:5px 12px;
+  font-size:12px
+}
+.activity-filters .tag b {
+  margin-left:5px;
+  font-weight:600;
+  color:var(--muted-soft);
+  font-variant-numeric:tabular-nums
+}
+.activity-filters .tag.active b {
+  color:inherit;
+  opacity:.72
+}
+.activity-timeline {
+  max-height:340px;
+  overflow:auto;
+  margin-top:10px;
+  border:1px solid var(--card-border);
+  border-radius:10px;
+  background:var(--surface-sunken)
+}
+.activity-row {
+  display:grid;
+  grid-template-columns:64px 160px minmax(0,1fr);
+  gap:10px;
+  align-items:baseline;
+  padding:7px 12px;
+  border-bottom:1px solid var(--border-subtle);
+  font-size:13px;
+  line-height:1.55
+}
+.activity-row:last-child {
+  border-bottom:0
+}
+.activity-row:hover {
+  background:var(--surface-hover)
+}
+.activity-time {
+  color:var(--muted-soft);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px;
+  font-variant-numeric:tabular-nums
+}
+.activity-who {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-width:0;
+  color:var(--text-secondary);
+  font-size:12px
+}
+.activity-who .cat-dot {
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  flex:0 0 auto;
+  background:var(--muted-soft)
+}
+.activity-who .who-label {
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+.activity-who .who-mode {
+  flex:0 0 auto;
+  padding:1px 5px;
+  border-radius:5px;
+  background:var(--surface-chip);
+  border:1px solid var(--border-chip);
+  color:var(--muted-soft);
+  font-size:11px
+}
+.activity-text {
+  color:var(--text);
+  overflow-wrap:anywhere;
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:3;
+  overflow:hidden;
+  cursor:pointer
+}
+.activity-row.open .activity-text {
+  display:block;
+  -webkit-line-clamp:unset
+}
+.activity-row.cat-in .cat-dot {
+  background:var(--accent)
+}
+.activity-row.cat-out .cat-dot {
+  background:var(--ok)
+}
+.activity-row.cat-ai .cat-dot {
+  background:var(--act-ai)
+}
+.activity-row.cat-sys .cat-dot {
+  background:var(--act-sys)
+}
+.activity-empty {
+  padding:22px 12px;
+  text-align:center;
+  color:var(--muted-soft);
+  font-size:13px
+}
+.chips-line {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-items:center;
+  margin:6px 0 12px;
+  min-height:22px
+}
+.chip {
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:2px 6px 2px 8px;
+  border:1px solid var(--border-chip);
+  border-radius:14px;
+  background:var(--surface-chip);
+  font-size:12px;
+  color:var(--text-secondary);
+  font-variant-numeric:tabular-nums
+}
+.chip.bad {
+  border-color:var(--err);
+  color:var(--err)
+}
+.chip button {
+  border:0;
+  background:none;
+  padding:0 2px;
+  font-size:13px;
+  line-height:1;
+  color:var(--muted-soft);
+  cursor:pointer
+}
+.chip button:hover {
+  color:var(--err)
+}
+@media (max-width:760px) {
+  .activity-row {
+    grid-template-columns:56px minmax(0,1fr);
+    row-gap:2px;
+    padding:8px 10px
+  }
+  .activity-time {
+    grid-column:1;
+    grid-row:1
+  }
+  .activity-who {
+    grid-column:2;
+    grid-row:1
+  }
+  .activity-text {
+    grid-column:2;
+    grid-row:2
+  }
+  .activity-toolbar input[type="search"] {
+    flex:1 1 100%
+  }
+  .activity-filters {
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    width:100%;
+    padding-bottom:2px
+  }
+  .activity-filters .tag {
+    flex:0 0 auto;
+    padding:4px 10px
+  }
+}
+@media (max-width:1180px) {
+  .chain-strip {
+    grid-template-columns:repeat(2,minmax(0,1fr))
+  }
+  .chain-hop {
+    border-bottom:1px solid var(--card-border)
+  }
+  .chain-hop:nth-child(2n) {
+    border-right:0
+  }
+  .chain-hop:last-child {
+    grid-column:1/-1;
+    border-bottom:0
+  }
+}
 .tag {
   display:inline-block;
   background:var(--surface-chip);
@@ -850,7 +1257,7 @@ tr:last-child td {
   background:var(--pill-red-bg);
   color:var(--pill-red-fg)
 }
-#sessionList,#pendingList {
+#sessionList,#pendingList,#policyList {
   overflow:auto
 }
 .tool-log-table,.slang-scroll {
@@ -865,7 +1272,18 @@ tr:last-child td {
   table-layout:fixed
 }
 .slang-scroll table {
-  min-width:900px
+  min-width:1064px;
+  table-layout:fixed
+}
+.slang-scroll td {
+  vertical-align:top
+}
+.slang-actions {
+  white-space:nowrap
+}
+.slang-actions button {
+  padding:6px 9px;
+  margin:0 6px 4px 0
 }
 .tool-log-table thead th,.slang-scroll thead th {
   position:sticky;
@@ -996,7 +1414,7 @@ tr:last-child td {
 }
 .toast {
   position:fixed;
-  bottom:24px;
+  bottom:118px;
   left:50%;
   transform:translateX(-50%);
   max-width:calc(100vw - 40px);
@@ -1006,7 +1424,25 @@ tr:last-child td {
   box-shadow:var(--shadow-log);
   border-radius:12px;
   z-index:1100;
-  font-size:13px
+  font-size:13px;
+  white-space:pre-line;
+  border-left:3px solid transparent
+}
+.toast.ok {
+  border-left-color:var(--ok)
+}
+.toast.err {
+  border-left-color:var(--err)
+}
+.toast.warn {
+  border-left-color:var(--act-sys)
+}
+@media (max-width:760px) {
+  .toast {
+    bottom:96px;
+    padding:10px 16px;
+    font-size:12.5px
+  }
 }
 .sr-only {
   position:absolute;
@@ -1087,6 +1523,20 @@ tr:last-child td {
   }
   .metric {
     padding:0 17px
+  }
+  /* 概览 5 个指标：窄屏两列，第 5 项横跨整行，避免半格孤项。 */
+  #overviewSummary {
+    grid-template-columns:repeat(2,minmax(0,1fr))
+  }
+  #overviewSummary .metric {
+    padding:18px 17px;
+    border-bottom:1px solid var(--card-border)
+  }
+  #overviewSummary .metric:nth-child(2n) {
+    border-right:0
+  }
+  #overviewSummary .metric:last-child {
+    grid-column:1/-1
   }
   .metric strong {
     font-size:23px
@@ -1200,6 +1650,13 @@ tr:last-child td {
   }
   .metric:nth-child(5) {
     border-bottom:0
+  }
+  /* 概览第 5 项在移动端横跨整行；第 3 项下面还有第 5 行，补回分隔线。 */
+  #overviewSummary .metric:nth-child(3) {
+    border-bottom:1px solid var(--card-border)
+  }
+  #overviewSummary .metric:last-child {
+    grid-column:1/-1
   }
   .metric strong {
     font-size:24px;
@@ -1385,6 +1842,8 @@ tr:last-child td {
   --danger-hover-bg:#3a2120;
   --err:#ff8f84;
   --ok:#4fd1a5;
+  --act-ai:#c0b0ff;
+  --act-sys:#f2c67a;
   --pill-blue-bg:#1b2440;
   --pill-blue-fg:#aabaff;
   --pill-green-bg:#12291f;
@@ -1789,7 +2248,7 @@ button:active:not(:disabled) {
     <div class="nav-label">工作空间</div>
     <nav id="mainNav">
       <button data-view="overview" class="nav-item active" aria-current="page"><span class="nav-icon" aria-hidden="true">◫</span>运行总览</button>
-      <button data-view="sessions" class="nav-item"><span class="nav-icon" aria-hidden="true">☷</span>会话与审批<span class="nav-count" id="pendingCount">—</span></button>
+      <button data-view="sessions" class="nav-item"><span class="nav-icon" aria-hidden="true">☷</span>会话与审批<span class="nav-count" id="pendingCount" hidden></span></button>
       <button data-view="persona" class="nav-item"><span class="nav-icon" aria-hidden="true">◉</span>人格与角色</button>
       <div class="nav-label">聊天行为</div>
       <button data-view="social-v2" class="nav-item"><span class="nav-icon" aria-hidden="true">◈</span>二代仿真<span class="nav-note">V2</span></button>
@@ -1820,6 +2279,19 @@ button:active:not(:disabled) {
         <button class="metric metric-link" data-view="sessions"><span>已建立会话</span><strong id="metricSessions">—</strong><small>查看会话映射 <span aria-hidden="true">↗</span></small></button>
         <button class="metric metric-link" data-view="sessions" data-target="section-pending"><span>待处理请求</span><strong id="metricPending">—</strong><small>提问与工具审批 <span aria-hidden="true">↗</span></small></button>
       </div>
+      <section id="section-health" data-page="overview" class="card span-all">
+        <h2 data-note="每 15 秒自动刷新">桥接健康</h2>
+        <div class="meta">先看这一块：会话忙不忙、队列有多深、上下文离压缩线还有多远、今天花了多少；最后一行是最近告警。</div>
+        <div class="health-cards" id="healthCards"><span class="meta">正在读取…</span></div>
+        <div class="health-table-wrap" id="healthTable"><span class="meta">正在读取会话…</span></div>
+        <div class="health-warnings" id="healthWarnings"></div>
+      </section>
+      <section id="section-chain" data-page="overview" class="card span-all">
+        <h2 data-note="每 15 秒自动探测">链路健康</h2>
+        <div class="meta">从桥接这台机器逐跳探测本机端口：DSH 3080 → QQ Agent 3210 → SnowLuma 5099 → OneBot 3001 → SideTap 8100；任何一跳断开，AI 的回复都送不出去。</div>
+        <div class="chain-strip" id="chainStrip"><span class="meta">正在探测…</span></div>
+        <div class="meta" id="chainMsg">—</div>
+      </section>
       <div class="grid">
         <section id="section-mode" data-page="overview" class="card span-all">
       <h2>运行模式</h2>
@@ -1839,13 +2311,38 @@ button:active:not(:disabled) {
       <h2>会话映射</h2>
       <div id="sessionList">加载中…</div>
     </section>
-<section id="section-pending" data-page="sessions" class="card span-all">
+<section id="section-session-policy" data-page="sessions" class="card span-all">
+      <h2>会话策略</h2>
+      <div class="meta">按会话覆盖 <b>model / effort</b>。保存后会写 <code>config.json</code>，下一条消息应用；覆盖变更可能重建会话上下文。留空字段不会删除已有覆盖，恢复全局默认请点「清除」。mode / preset 暂未接入按会话建会话，这里只读展示。</div>
+      <div class="row" style="margin-top:10px">
+        <button id="policyRefresh" class="small" type="button">刷新策略</button>
+        <span class="meta" id="policyStatus"></span>
+      </div>
+      <div id="policyList">加载中…</div>
+    </section>
+    <section id="section-pending" data-page="sessions" class="card span-all">
       <h2>挂起审批 / 提问</h2>
       <div id="pendingList">加载中…</div>
     </section>
 <section id="section-activity" data-page="overview" class="card">
-      <h2>活动日志（最近 100 条）</h2>
-      <pre id="activity">（空）</pre>
+      <h2 data-note="每 3 秒自动同步">活动日志</h2>
+      <div class="meta">最近 100 条桥接事件，按时间顺序排列；按类型分色，过长会折叠，点开看全文，也可切到原文对照。</div>
+      <div class="activity-toolbar">
+        <input type="search" id="activitySearch" placeholder="搜索内容 / 会话号 / 错误" autocomplete="off" aria-label="搜索活动日志">
+        <div class="activity-filters" role="group" aria-label="按类型筛选活动日志">
+          <button type="button" class="tag active" data-activity-cat="all" aria-pressed="true">全部<b id="activityCountAll">0</b></button>
+          <button type="button" class="tag" data-activity-cat="in" aria-pressed="false">收消息<b id="activityCountIn">0</b></button>
+          <button type="button" class="tag" data-activity-cat="out" aria-pressed="false">发送<b id="activityCountOut">0</b></button>
+          <button type="button" class="tag" data-activity-cat="ai" aria-pressed="false">AI 内部<b id="activityCountAi">0</b></button>
+          <button type="button" class="tag" data-activity-cat="sys" aria-pressed="false">系统<b id="activityCountSys">0</b></button>
+        </div>
+        <label class="inline-check"><input type="checkbox" id="activityRaw"> 原文</label>
+      </div>
+      <div id="activityTimeline" class="activity-timeline" role="log" aria-live="off" aria-label="活动日志时间线">
+        <div class="activity-empty">加载中…</div>
+      </div>
+      <pre id="activity" hidden>（空）</pre>
+      <div class="meta" id="activityFoot">—</div>
     </section>
 <section id="section-persona-audit" data-page="persona" class="card span-all">
       <h2>人味仪表盘</h2>
@@ -2058,6 +2555,9 @@ button:active:not(:disabled) {
         <button id="v2ResetBtn" class="danger">重置二代状态</button>
         <button id="v2ConfigSaveTop" style="font-weight:bold;padding:6px 14px">保存当前参数</button>
         <span class="meta" id="v2ActivityStatus">读取中…</span>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <input type="search" id="v2SettingsSearch" placeholder="搜索设置项：如 唤醒、冷却、表情、token、上下文" aria-label="搜索二代仿真设置" style="flex:1">
       </div>
 
       <details class="settings-group"><summary>工具开关（关闭后 AI 不再拿到该工具；需重启 DSH 刷新工具清单，重启前仅调用时拒绝）</summary><div class="settings-content">
@@ -2369,10 +2869,10 @@ button:active:not(:disabled) {
         <div class="row" style="margin-top:8px">
           <input type="text" id="slangSearchCand" placeholder="搜索词条 / 草稿含义 / 语境证据" style="flex:1">
           <select id="slangLimitCand" style="width:110px">
-            <option value="50">每页 50</option>
-            <option value="100" selected>每页 100</option>
-            <option value="200">每页 200</option>
-            <option value="500">每页 500</option>
+            <option value="50">显示 50 条</option>
+            <option value="100" selected>显示 100 条</option>
+            <option value="200">显示 200 条</option>
+            <option value="500">显示 500 条</option>
           </select>
         </div>
         <div class="slang-scroll" id="slangCandidateList">加载中…</div>
@@ -2387,10 +2887,10 @@ button:active:not(:disabled) {
         <div class="row" style="margin-top:8px">
           <input type="text" id="slangSearchConfirmed" placeholder="搜索词条 / 含义 / 用法 / 示例 / 来源" style="flex:1">
           <select id="slangLimitConfirmed" style="width:110px">
-            <option value="50">每页 50</option>
-            <option value="100" selected>每页 100</option>
-            <option value="200">每页 200</option>
-            <option value="500">每页 500</option>
+            <option value="50">显示 50 条</option>
+            <option value="100" selected>显示 100 条</option>
+            <option value="200">显示 200 条</option>
+            <option value="500">显示 500 条</option>
           </select>
         </div>
         <div class="slang-scroll" id="slangConfirmedList">加载中…</div>
@@ -2406,10 +2906,10 @@ button:active:not(:disabled) {
         <div class="row" style="margin-top:8px">
           <input type="text" id="slangSearchRejected" placeholder="搜索词条 / 拒绝原因" style="flex:1">
           <select id="slangLimitRejected" style="width:110px">
-            <option value="50">每页 50</option>
-            <option value="100" selected>每页 100</option>
-            <option value="200">每页 200</option>
-            <option value="500">每页 500</option>
+            <option value="50">显示 50 条</option>
+            <option value="100" selected>显示 100 条</option>
+            <option value="200">显示 200 条</option>
+            <option value="500">显示 500 条</option>
           </select>
         </div>
         <div class="slang-scroll" id="slangRejectedList">加载中…</div>
@@ -2481,15 +2981,20 @@ button:active:not(:disabled) {
       <h2>白名单 / 管理员</h2>
       <label>允许的群号（逗号分隔）</label>
       <input type="text" id="wlGroups" placeholder="123456789, 123456">
+      <div class="chips-line" id="wlGroupsChips"></div>
       <label>允许的私聊 QQ（逗号分隔）</label>
       <input type="text" id="wlPrivate" placeholder="123456789">
+      <div class="chips-line" id="wlPrivateChips"></div>
       <label>管理员 QQ（ownerQQ，最高权限）</label>
       <input type="text" id="ownerQQ" placeholder="123456789">
+      <div class="chips-line" id="ownerQQChips"></div>
       <div class="meta">管理员是唯一可执行管理命令/审批/closed-agent 的 QQ；可留空清除（清除后无管理员，fail-closed）。</div>
       <label>拒绝的群号（黑名单，逗号分隔）</label>
       <input type="text" id="dnGroups" placeholder="">
+      <div class="chips-line" id="dnGroupsChips"></div>
       <label>拒绝的私聊 QQ（黑名单，逗号分隔）</label>
       <input type="text" id="dnPrivate" placeholder="">
+      <div class="chips-line" id="dnPrivateChips"></div>
       <div class="row" style="margin-top:10px">
         <button id="wlSave">保存白名单</button>
         <span class="meta">保存后立即生效并写入 config.json</span>
@@ -2597,6 +3102,19 @@ button:active:not(:disabled) {
         <span class="meta" id="aiNotifyMsg"></span>
       </div>
     </section>
+    <section id="section-logs" data-page="operations" class="card span-all">
+      <h2 data-note="只读 · 尾部 512 KB">运行日志</h2>
+      <div class="meta">读取 <code>state/bridge.log</code> 的末尾内容，用来排查桥接、上游与工具调用的问题；只读，不会改动日志文件。</div>
+      <div class="row log-controls">
+        <select id="logFile" style="width:140px"><option value="current">当前日志</option><option value="previous">上一份（.1）</option></select>
+        <select id="logLines" style="width:120px"><option value="200">200 行</option><option value="400" selected>400 行</option><option value="1000">1000 行</option><option value="2000">2000 行</option></select>
+        <input type="search" id="logQuery" placeholder="过滤关键字（如 error、收到、工具）" autocomplete="off" style="flex:1;min-width:200px">
+        <label class="inline-check"><input type="checkbox" id="logAuto"> 每 5 秒自动刷新</label>
+        <button id="logRefreshBtn" class="small" type="button">刷新</button>
+      </div>
+      <pre id="logView" class="log-view" tabindex="0">尚未加载</pre>
+      <div class="meta" id="logMsg">—</div>
+    </section>
 <section id="section-usage" data-page="usage" class="card span-all">
       <h2 data-note="每 3 秒自动同步">令牌与花费</h2>
       <div class="meta">数据来源是 DSH 会话事件里的 provider usage。<b>累计总量</b>取 <code>tokenUsage</code> 投影（整条会话日志的权威累计，含桥接启动前的历史）；<b>逐轮明细</b>由 <code>assistant/message</code> 的 usage 折叠而来，能追溯到多深取决于会话开场快照带回的历史条数。金额按 DeepSeek 官方价目表折算，区分高峰 / 空闲时段（高峰单价为空闲的 2 倍）。</div>
@@ -2691,7 +3209,20 @@ button:active:not(:disabled) {
   }
 })();
 
-async function api(path, method, body, _retried = 0) {
+// GET 去重：首屏多处同时拉同一接口时只发一次，避免一串重复请求。
+const apiInflight = new Map();
+function api(path, method, body) {
+  const verb = method || 'GET';
+  if (verb !== 'GET') return apiCore(path, verb, body);
+  const hit = apiInflight.get(path);
+  if (hit) return hit;
+  const pending = apiCore(path, verb, body).finally(() => {
+    if (apiInflight.get(path) === pending) apiInflight.delete(path);
+  });
+  apiInflight.set(path, pending);
+  return pending;
+}
+async function apiCore(path, method, body, _retried = 0) {
   const headers = body ? {'content-type':'application/json'} : {};
   const token = localStorage.getItem('consoleToken');
   if (token) headers['x-console-token'] = token;
@@ -2704,7 +3235,7 @@ async function api(path, method, body, _retried = 0) {
     const t = prompt('请输入控制台访问令牌：');
     if (t) {
       localStorage.setItem('consoleToken', t.trim());
-      return api(path, method, body, _retried + 1);
+      return apiCore(path, method, body, _retried + 1);
     }
     localStorage.removeItem('consoleToken');
     throw new Error('未授权');
@@ -2712,6 +3243,14 @@ async function api(path, method, body, _retried = 0) {
   return res.json();
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// 渲染指纹：接口返回没变化就不重建 DOM，避免 3 秒一次把焦点、文本选择、展开的下拉框冲掉。
+const renderFingerprints = new Map();
+function changed(key, payload) {
+  const fp = JSON.stringify(payload);
+  if (renderFingerprints.get(key) === fp) return false;
+  renderFingerprints.set(key, fp);
+  return true;
+}
 // 上游静默时长的人话渲染：只用于 SnowLuma 健康提示（秒 / 分钟 / 小时）。
 function fmtAgoMs(ms) {
   if (ms === null || ms === undefined || ms === '') return '未知';
@@ -2768,12 +3307,22 @@ function renderSnowlumaHealth(sl) {
 async function refresh() {
   try {
     const s = await api('/api/status');
-    document.querySelectorAll('#modeRow button').forEach(b => (b.classList.toggle('active', b.dataset.mode === s.mode), b.setAttribute('aria-pressed', String(b.dataset.mode === s.mode))));
-    document.getElementById('roleText').textContent = s.role || '无';
-    document.getElementById('roleModeText').textContent = s.roleMode === 'silent' ? '静默' : '正常';
-    const modeLabel = s.mode === 'reserved' ? '一代仿真模式' : s.mode === 'reserved2' ? '二代仿真模式' : s.mode === 'closed-agent' ? '封闭 Agent' : '聊天模式';
-    updateOverview(s, modeLabel);
-    document.getElementById('activity').textContent = s.activity || '（空）';
+    if (changed('status', [s.mode, s.role, s.roleMode, s.dshReady, s.snowluma, s.closedAgentPreset, s.ownerQQ, s.allowGroups, s.allowPrivate])) {
+      document.querySelectorAll('#modeRow button').forEach(b => (b.classList.toggle('active', b.dataset.mode === s.mode), b.setAttribute('aria-pressed', String(b.dataset.mode === s.mode))));
+      document.getElementById('roleText').textContent = s.role || '无';
+      document.getElementById('roleModeText').textContent = s.roleMode === 'silent' ? '静默' : '正常';
+      const modeLabel = s.mode === 'reserved' ? '一代仿真模式' : s.mode === 'reserved2' ? '二代仿真模式' : s.mode === 'closed-agent' ? '封闭 Agent' : '聊天模式';
+      updateOverview(s, modeLabel);
+    }
+    if (changed('activity', s.activity)) {
+      activitySource = s.activity || '';
+      activityItems = activitySource.split('\n').map((line) => line.trim()).filter(Boolean).map(parseActivityLine);
+      activityRenderedAt = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+      const activityPre = document.getElementById('activity');
+      if (activityPre) activityPre.textContent = activitySource || '（空）';
+      renderActivity();
+    }
+    document.getElementById('lastUpdated').textContent = '状态同步于 ' + new Date().toLocaleTimeString('zh-CN', { hour12: false });
     const presetSel = document.getElementById('closedPreset');
     if (presetSel && document.activeElement !== presetSel) presetSel.value = s.closedAgentPreset || '';
   } catch (e) { document.getElementById('statusText').textContent = '连接中断 · 请检查桥接服务'; setConnectionError(e); }
@@ -2809,10 +3358,10 @@ async function saveMode(mode) {
     // 桥接会把模式写穿到 DSH 设置；写穿失败时本地值会在下一次 5 秒轮询被覆盖回滚。
     // 不提示的话用户只会看到「刚切过去又自己变回来了」，无从判断原因。
     if (r.dshSynced === false) {
-      alert('模式已写入本地，但未能同步到 DSH 设置（DSH 未运行？）——\n下一次轮询（约 5 秒）会把模式改回去。请检查 DSH 与桥接日志。');
+      toastErr('模式已写入本地，但未能同步到 DSH 设置（DSH 未运行？）——\n下一次轮询（约 5 秒）会把模式改回去。请检查 DSH 与桥接日志。');
     }
   } else {
-    alert(r.error || '切换失败');
+    toastErr(r.error || '切换失败');
   }
   return r;
 }
@@ -3028,6 +3577,7 @@ async function refreshWhitelist() {
     document.getElementById('ownerQQ').value = w.ownerQQ != null ? String(w.ownerQQ) : '';
     document.getElementById('dnGroups').value = (w.deny.groups || []).join(', ');
     document.getElementById('dnPrivate').value = (w.deny.private || []).join(', ');
+    renderWhitelistChips();
   } catch {}
 }
 
@@ -3036,6 +3586,7 @@ async function refreshSessions() {
     const s = await api('/api/sessions');
     const box = document.getElementById('sessionList');
     document.getElementById('metricSessions').textContent = s.sessions.length;
+    if (!changed('sessions', s.sessions)) return;
     if (!s.sessions.length) { box.innerHTML = '<div class="empty-state"><strong>还没有会话</strong><p>白名单中的群或好友发来消息后，会话会显示在这里。</p></div>'; return; }
     let html = '<table><tr><th>QQ 会话</th><th>DSH 会话 ID</th><th>类型</th><th></th></tr>';
     for (const x of s.sessions) {
@@ -3048,18 +3599,114 @@ async function refreshSessions() {
     box.querySelectorAll('[data-reset-key]').forEach(btn => btn.addEventListener('click', async () => {
       if (!confirm('确定清除该会话的上下文？下次消息将开新会话。')) return;
       const r = await api('/api/session/reset', 'POST', { key: btn.dataset.resetKey });
-      alert(r.ok ? '✅ 已清除上下文' : ('❌ ' + (r.error || '失败')));
+      showConsoleToast(r.ok ? '✅ 已清除上下文' : ('❌ ' + (r.error || '失败')), r.ok ? 'ok' : 'err');
       refreshSessions();
     }));
   } catch {}
+}
+
+async function refreshPolicies() {
+  const box = document.getElementById('policyList');
+  const status = document.getElementById('policyStatus');
+  if (!box) return;
+  box.textContent = '加载中…';
+  if (status) status.textContent = '';
+  try {
+    const s = await api('/api/sessions');
+    if (!s.sessions.length) {
+      box.innerHTML = '<div class="empty-state"><strong>还没有会话</strong><p>白名单中的群或好友发来消息后，会在这里出现可覆盖的会话策略。</p></div>';
+      return;
+    }
+    const rows = await Promise.all(s.sessions.map(async (x) => {
+      try {
+        return { x, p: await api('/api/socialV2/policy?key=' + encodeURIComponent(x.key)) };
+      } catch (e) {
+        return { x, p: { ok: false, error: e.message || String(e) } };
+      }
+    }));
+    const modes = ['simulation', 'reserved2', 'closed-agent', 'reserved', 'chat'];
+    let html = '<table class="policy-table"><tr><th>会话</th><th>mode</th><th>preset</th><th>model</th><th>effort</th><th>生效值</th><th></th></tr>';
+    for (const { x, p } of rows) {
+      if (!p.ok) {
+        html += `<tr data-policy-key="${esc(x.key)}"><td>${esc(x.key)}</td><td colspan="6"><span class="err">${esc(p.error || '读取失败')}</span></td></tr>`;
+        continue;
+      }
+      const pol = p.policy || {};
+      const eff = p.effective || {};
+      const mode = pol.mode || p.globalMode || '';
+      const modeOpts = modes.map(m => `<option value="${m}"${m === mode ? ' selected' : ''}>${m}</option>`).join('');
+      const effort = pol.reasoningEffort || '';
+      const effortOpts = [['', '默认'], ['low', 'low'], ['high', 'high'], ['max', 'max']]
+        .map(([v, label]) => `<option value="${v}"${v === effort ? ' selected' : ''}>${label}</option>`).join('');
+      html += `<tr data-policy-key="${esc(x.key)}">`
+        + `<td>${esc(x.key)}${x.owner ? ' <span class="pill r">管理员</span>' : ''}</td>`
+        + `<td><select data-policy-mode disabled title="按会话 mode 暂未接入建会话，仅展示">${modeOpts}</select></td>`
+        + `<td><input type="text" data-policy-preset value="${esc(pol.preset || '')}" placeholder="（默认）" style="width:120px" disabled title="按会话 preset 暂未接入建会话，仅展示"></td>`
+        + `<td><input type="text" data-policy-model value="${esc(pol.model || '')}" placeholder="${esc(eff.model || '默认')}" style="width:120px"></td>`
+        + `<td><select data-policy-effort>${effortOpts}</select></td>`
+        + `<td class="meta"><code>${esc(eff.model || '-')}</code> / ${esc(eff.reasoningEffort || '-')}${pol.model || pol.reasoningEffort ? ' <span class="pill b">覆盖</span>' : ''}</td>`
+        + `<td><button class="small" type="button" data-policy-save>保存</button> <button class="small danger" type="button" data-policy-clear>清除</button></td>`
+        + '</tr>';
+    }
+    box.innerHTML = html + '</table>';
+    if (status) status.textContent = `已加载 ${rows.length} 个会话；点「清除」恢复全局默认。`;
+    box.querySelectorAll('[data-policy-save]').forEach(btn => btn.addEventListener('click', async () => {
+      const tr = btn.closest('tr');
+      const key = tr?.dataset.policyKey;
+      if (!key) return;
+      btn.disabled = true;
+      try {
+        const model = tr.querySelector('[data-policy-model]')?.value.trim();
+        const reasoningEffort = tr.querySelector('[data-policy-effort]')?.value;
+        if (!model && !reasoningEffort) {
+          showConsoleToast('model / effort 至少填一项；要恢复默认请点「清除」', 'err');
+          return;
+        }
+        const body = { key };
+        if (model) body.model = model;
+        if (reasoningEffort) body.reasoningEffort = reasoningEffort;
+        const r = await api('/api/socialV2/policy', 'POST', body);
+        showConsoleToast(r.ok ? '✅ 会话策略已保存' : ('❌ ' + (r.error || '保存失败')), r.ok ? 'ok' : 'err');
+        if (r.ok) refreshPolicies();
+      } catch (e) {
+        showConsoleToast('❌ ' + (e.message || '保存失败'), 'err');
+      } finally {
+        btn.disabled = false;
+      }
+    }));
+    box.querySelectorAll('[data-policy-clear]').forEach(btn => btn.addEventListener('click', async () => {
+      const tr = btn.closest('tr');
+      const key = tr?.dataset.policyKey;
+      if (!key || !confirm(`清除 ${key} 的会话策略覆盖，恢复全局默认？`)) return;
+      btn.disabled = true;
+      try {
+        const r = await api('/api/socialV2/policy', 'POST', { key, clear: true });
+        showConsoleToast(r.ok ? '✅ 已清除会话策略' : ('❌ ' + (r.error || '清除失败')), r.ok ? 'ok' : 'err');
+        if (r.ok) refreshPolicies();
+      } catch (e) {
+        showConsoleToast('❌ ' + (e.message || '清除失败'), 'err');
+      } finally {
+        btn.disabled = false;
+      }
+    }));
+  } catch (e) {
+    box.textContent = '加载失败：' + (e.message || e);
+  }
 }
 
 async function refreshPending() {
   try {
     const p = await api('/api/pending');
     const box = document.getElementById('pendingList');
-    document.getElementById('metricPending').textContent = p.pending.length;
-    document.getElementById('pendingCount').textContent = p.pending.length;
+    const n = p.pending.length;
+    document.getElementById('metricPending').textContent = n;
+    // 侧栏徽标只显示待处理数，0 时隐藏：否则「会话与审批 0」会被读成没有会话。
+    const badge = document.getElementById('pendingCount');
+    badge.textContent = n ? String(n) : '';
+    badge.hidden = !n;
+    badge.title = n ? n + ' 个待处理的审批 / 提问' : '';
+    badge.setAttribute('aria-label', n ? n + ' 个待处理的审批 / 提问' : '没有待处理的审批 / 提问');
+    if (!changed('pending', p.pending)) return;
     if (!p.pending.length) { box.innerHTML = '<div class="empty-state"><strong>暂时没有待处理请求</strong><p>AI 的提问或工具审批会出现在这里，请前往对应 QQ 会话回复。</p></div>'; return; }
     let html = '<table><tr><th>会话</th><th>类型</th><th>详情</th></tr>';
     for (const x of p.pending) {
@@ -3085,7 +3732,7 @@ document.getElementById('closedPreset').addEventListener('change', async () => {
 });
 document.getElementById('roleSet').addEventListener('click', async () => {
   const r = await api('/api/role', 'POST', { role: document.getElementById('roleInput').value.trim() });
-  if (r.ok) refreshRoles(); else alert(r.error || '设置失败');
+  if (r.ok) refreshRoles(); else toastErr(r.error || '设置失败');
 });
 // ── 人味仪表盘 ──────────────────────────────────────────────
 async function loadPersonaAudit() {
@@ -3263,8 +3910,8 @@ document.getElementById('wlSave').addEventListener('click', async () => {
     deny: { private: parse(document.getElementById('dnPrivate').value), groups: parse(document.getElementById('dnGroups').value) },
     ownerQQ: document.getElementById('ownerQQ').value.trim()
   });
-  if (r.ok) { refreshWhitelist(); refresh(); alert('白名单已保存并生效'); }
-  else alert(r.error || '保存失败');
+  if (r.ok) { refreshWhitelist(); refresh(); toastOk('白名单已保存并生效'); }
+  else toastErr(r.error || '保存失败');
 });
 document.getElementById('tsSend').addEventListener('click', async () => {
   const r = await api('/api/test-send', 'POST', {
@@ -3291,7 +3938,7 @@ document.getElementById('aiNotifySend').addEventListener('click', async () => {
   const kind = document.getElementById('aiNotifyKind').value;
   const id = document.getElementById('aiNotifyId').value.trim();
   const message = document.getElementById('aiNotifyMessage').value.trim();
-  if (!id || !message) { alert('请填写群号/QQ 号和提醒内容'); return; }
+  if (!id || !message) { toastInfo('请填写群号/QQ 号和提醒内容'); return; }
   const r = await api('/api/console/notify-ai', 'POST', { key: kind + ':' + id, message });
   const msg = document.getElementById('aiNotifyMsg');
   msg.textContent = r.ok ? ('✅ 已投递到 DSH：' + r.sessionId) : ('❌ ' + (r.error || '失败'));
@@ -3538,7 +4185,7 @@ async function saveV2Config() {
 
 async function viewV2State() {
   const key = document.getElementById('v2StateKey').value.trim();
-  if (!key) { alert('请输入会话 key'); return; }
+  if (!key) { toastInfo('请输入会话 key'); return; }
   const r = await api('/api/socialV2/state?key=' + encodeURIComponent(key));
   document.getElementById('v2StateOutput').textContent = JSON.stringify(r, null, 2);
 }
@@ -3973,7 +4620,7 @@ document.getElementById('v2ResetBtn').addEventListener('click', async () => {
 document.getElementById('v2StateView').addEventListener('click', viewV2State);
 document.getElementById('v2ForceWake').addEventListener('click', async () => {
   const key = document.getElementById('v2StateKey').value.trim();
-  if (!key) { alert('请输入会话 key'); return; }
+  if (!key) { toastInfo('请输入会话 key'); return; }
   const r = await api('/api/socialV2/wake', 'POST', { key, reason: 'admin' });
   const msg = document.getElementById('v2ConfigMsg');
   msg.textContent = r.ok ? '✅ 已发送唤醒' : ('❌ ' + (r.error || '失败'));
@@ -4054,14 +4701,17 @@ async function refreshSocialStatus() {
     const stateEntries = Object.entries(s.states || {});
     const sel = document.getElementById('sStateKey');
     const prevSel = sel.value;
-    sel.innerHTML = '<option value="">选择会话</option>';
-    for (const [k] of stateEntries) {
-      const opt = document.createElement('option');
-      opt.value = k;
-      opt.textContent = k;
-      sel.appendChild(opt);
+    if (changed('socialKeys', stateEntries.map(([k]) => k))) {
+      sel.innerHTML = '<option value="">选择会话</option>';
+      for (const [k] of stateEntries) {
+        const opt = document.createElement('option');
+        opt.value = k;
+        opt.textContent = k;
+        sel.appendChild(opt);
+      }
+      if (prevSel && [...sel.options].some(o => o.value === prevSel)) sel.value = prevSel;
     }
-    if (prevSel && [...sel.options].some(o => o.value === prevSel)) sel.value = prevSel;
+    if (!changed('socialStatus', [buff, s.states])) return;
     let html = '摘要缓冲: ' + esc(buff) + '<br>状态:';
     if (!stateEntries.length) html += ' 暂无（发过消息的群会显示状态）';
     for (const [k, v] of stateEntries) {
@@ -4113,7 +4763,7 @@ document.getElementById('socialFlush').addEventListener('click', async () => {
 });
 async function setSocialPhase(phase) {
   const key = document.getElementById('sStateKey').value;
-  if (!key) { alert('请先选择会话'); return; }
+  if (!key) { toastInfo('请先选择会话'); return; }
   const r = await api('/api/social/state', 'POST', { key, phase });
   document.getElementById('socialMsg').textContent = r.ok ? ('✅ 已设为' + (phase === 'active' ? '活跃' : '观望')) : ('❌ ' + (r.error || '失败'));
   document.getElementById('socialMsg').className = r.ok ? 'meta ok' : 'meta err';
@@ -4202,7 +4852,7 @@ function renderSlangPanel() {
   const limit = getSlangLimit();
   const shown = filtered.slice(0, limit);
   let html = `<div class="meta" style="padding:6px 8px">共 ${filtered.length} 条，显示 ${shown.length} 条（可滚动查找）</div>`;
-  html += '<table><tr><th>选择</th><th>词条</th><th>次数</th><th>来源</th><th>含义 / 用法 / 示例</th><th>参考来源</th><th>语境证据</th><th>操作</th></tr>';
+  html += '<table><colgroup><col style="width:56px"><col style="width:112px"><col style="width:60px"><col style="width:88px"><col style="width:224px"><col style="width:110px"><col style="width:214px"><col style="width:200px"></colgroup><tr><th>选择</th><th>词条</th><th>次数</th><th>来源</th><th>含义 / 用法 / 示例</th><th>参考来源</th><th>语境证据</th><th>操作</th></tr>';
   for (const e of shown) {
     const meaning = e.meaning ? esc(e.meaning) : (status === 'candidate' ? '<span class="meta">待研究</span>' : '<span class="meta">无</span>');
     const checked = slangSelected.has(e.id) ? ' checked' : '';
@@ -4225,7 +4875,7 @@ function renderSlangPanel() {
       <td>${meaning}${e.usage ? '<br><span class="meta">用法：' + esc(e.usage) + '</span>' : ''}${e.example ? '<br><span class="meta">例：' + esc(e.example) + '</span>' : ''}${e.risk ? '<br><span class="meta">风险：' + esc(e.risk) + '</span>' : ''}</td>
       <td>${slangSourcesHtml(e) || '<span class="meta">—</span>'}</td>
       <td>${slangEvidenceHtml(e)}</td>
-      <td class="row">${actions.join('')}</td>
+      <td class="slang-actions">${actions.join('')}</td>
     </tr>`;
   }
   box.innerHTML = html + '</table>';
@@ -4238,7 +4888,7 @@ function renderSlangPanel() {
   box.querySelectorAll('[data-slang-edit]').forEach((btn) => btn.addEventListener('click', () => openSlangModal(btn.dataset.slangEdit, 'edit')));
   box.querySelectorAll('[data-slang-reject]').forEach((btn) => btn.addEventListener('click', async () => {
     const r2 = await api('/api/slang/' + btn.dataset.slangReject + '/reject', 'POST', {});
-    if (!r2.ok) alert(r2.error || '拒绝失败');
+    if (!r2.ok) toastErr(r2.error || '拒绝失败');
     setSlangMsg(r2.ok ? '✅ 已拒绝' : ('❌ ' + (r2.error || '失败')), r2.ok);
     refreshSlang();
   }));
@@ -4246,14 +4896,14 @@ function renderSlangPanel() {
     const e = slangEntriesCache.find((x) => x.id === btn.dataset.slangRestore);
     if (!e) return;
     const r2 = await api('/api/slang/' + e.id, 'PATCH', { status: 'candidate' });
-    if (!r2.ok) alert(r2.error || '恢复失败');
+    if (!r2.ok) toastErr(r2.error || '恢复失败');
     setSlangMsg(r2.ok ? '✅ 已恢复为候选' : ('❌ ' + (r2.error || '失败')), r2.ok);
     refreshSlang();
   }));
   box.querySelectorAll('[data-slang-del]').forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('确定删除该黑话？')) return;
     const r2 = await api('/api/slang/' + btn.dataset.slangDel, 'DELETE', {});
-    if (!r2.ok) alert(r2.error || '删除失败');
+    if (!r2.ok) toastErr(r2.error || '删除失败');
     setSlangMsg(r2.ok ? '✅ 已删除' : ('❌ ' + (r2.error || '失败')), r2.ok);
     slangSelected.delete(btn.dataset.slangDel);
     refreshSlang();
@@ -4264,7 +4914,11 @@ function renderSlangPanel() {
 async function refreshSlang() {
   try {
     const r = await api('/api/plugins/slang/list');
-    slangEntriesCache = r.entries || [];
+    const entries = r.entries || [];
+    // 指纹只取会改变表格的字段：整包 entries 每 3 秒 stringify 一次太浪费。
+    const sig = entries.map((x) => x.id + ':' + x.status + ':' + (x.updatedAt || x.count || '')).join('|');
+    if (!changed('slang', sig)) return;
+    slangEntriesCache = entries;
     renderSlangPanel();
   } catch (e) {
     const box = document.getElementById('slangCandidateList');
@@ -4334,14 +4988,14 @@ document.getElementById('slangRejectedSelectAll').addEventListener('change', (e)
 });
 document.getElementById('slangBatchResearch').addEventListener('click', async () => {
   const ids = selectedIdsForStatus('candidate');
-  if (!ids.length) { alert('请先勾选要研究的候选词'); return; }
+  if (!ids.length) { toastInfo('请先勾选要研究的候选词'); return; }
   const r = await api('/api/plugins/slang/research', 'POST', { ids });
   setSlangMsg(r.ok ? `✅ 已送 ${r.count} 条候选到 DSH 深度联网研究，完成后刷新查看结果` : ('❌ ' + (r.error || '失败')), r.ok);
   if (r.ok) refreshSlang();
 });
 document.getElementById('slangBatchConfirm').addEventListener('click', async () => {
   const ids = selectedIdsForStatus('candidate');
-  if (!ids.length) { alert('请先勾选要确认的候选词'); return; }
+  if (!ids.length) { toastInfo('请先勾选要确认的候选词'); return; }
   if (!confirm(`确定批量确认 ${ids.length} 条候选？缺少含义的会被跳过。`)) return;
   const r = await api('/api/plugins/slang/batch-confirm', 'POST', { ids });
   setSlangMsg(r.ok ? `✅ 已确认 ${r.confirmedCount} 条，跳过 ${r.skippedCount} 条` : ('❌ ' + (r.error || '失败')), r.ok);
@@ -4349,7 +5003,7 @@ document.getElementById('slangBatchConfirm').addEventListener('click', async () 
 });
 document.getElementById('slangBatchReject').addEventListener('click', async () => {
   const ids = selectedIdsForStatus('candidate');
-  if (!ids.length) { alert('请先勾选要拒绝的候选词'); return; }
+  if (!ids.length) { toastInfo('请先勾选要拒绝的候选词'); return; }
   if (!confirm(`确定拒绝 ${ids.length} 条候选？`)) return;
   const r = await api('/api/plugins/slang/batch-reject', 'POST', { ids });
   setSlangMsg(r.ok ? `✅ 已拒绝 ${r.rejectedCount} 条` : ('❌ ' + (r.error || '失败')), r.ok);
@@ -4357,7 +5011,7 @@ document.getElementById('slangBatchReject').addEventListener('click', async () =
 });
 document.getElementById('slangBatchDeleteCand').addEventListener('click', async () => {
   const ids = selectedIdsForStatus('candidate');
-  if (!ids.length) { alert('请先勾选要删除的候选词'); return; }
+  if (!ids.length) { toastInfo('请先勾选要删除的候选词'); return; }
   if (!confirm(`确定删除 ${ids.length} 条候选？此操作不可恢复！`)) return;
   const r = await api('/api/plugins/slang/batch-delete', 'POST', { ids });
   setSlangMsg(r.ok ? `✅ 已删除 ${r.removedCount} 条候选` : ('❌ ' + (r.error || '失败')), r.ok);
@@ -4365,7 +5019,7 @@ document.getElementById('slangBatchDeleteCand').addEventListener('click', async 
 });
 document.getElementById('slangBatchDeleteConfirmed').addEventListener('click', async () => {
   const ids = selectedIdsForStatus('confirmed');
-  if (!ids.length) { alert('请先勾选要删除的已确认词条'); return; }
+  if (!ids.length) { toastInfo('请先勾选要删除的已确认词条'); return; }
   if (!confirm(`确定删除 ${ids.length} 条已确认黑话？此操作不可恢复！`)) return;
   const r = await api('/api/plugins/slang/batch-delete', 'POST', { ids });
   setSlangMsg(r.ok ? `✅ 已删除 ${r.removedCount} 条已确认` : ('❌ ' + (r.error || '失败')), r.ok);
@@ -4373,7 +5027,7 @@ document.getElementById('slangBatchDeleteConfirmed').addEventListener('click', a
 });
 document.getElementById('slangBatchDeleteRejected').addEventListener('click', async () => {
   const ids = selectedIdsForStatus('rejected');
-  if (!ids.length) { alert('请先勾选要删除的已拒绝词条'); return; }
+  if (!ids.length) { toastInfo('请先勾选要删除的已拒绝词条'); return; }
   if (!confirm(`确定删除 ${ids.length} 条已拒绝词条？此操作不可恢复！`)) return;
   const r = await api('/api/plugins/slang/batch-delete', 'POST', { ids });
   setSlangMsg(r.ok ? `✅ 已删除 ${r.removedCount} 条已拒绝` : ('❌ ' + (r.error || '失败')), r.ok);
@@ -4381,7 +5035,7 @@ document.getElementById('slangBatchDeleteRejected').addEventListener('click', as
 });
 document.getElementById('slangBatchRestore').addEventListener('click', async () => {
   const ids = selectedIdsForStatus('rejected');
-  if (!ids.length) { alert('请先勾选要恢复的已拒绝词条'); return; }
+  if (!ids.length) { toastInfo('请先勾选要恢复的已拒绝词条'); return; }
   let okCount = 0;
   for (const id of ids) {
     const r = await api('/api/slang/' + id, 'PATCH', { status: 'candidate' });
@@ -4393,12 +5047,12 @@ document.getElementById('slangBatchRestore').addEventListener('click', async () 
 document.getElementById('slangModalDirectConfirm').addEventListener('click', async () => {
   if (!slangModalId) return;
   const payload = readSlangModalPayload();
-  if (!payload.meaning) { alert('请先填写含义，确认后才会注入 AI 上下文'); return; }
+  if (!payload.meaning) { toastInfo('请先填写含义，确认后才会注入 AI 上下文'); return; }
   const e = slangEntriesCache.find((x) => x.id === slangModalId);
   if (!e) return;
   const path = slangModalMode === 'confirm' ? `/api/slang/${e.id}/confirm` : `/api/slang/${e.id}`;
   const r2 = await api(path, slangModalMode === 'confirm' ? 'POST' : 'PATCH', payload);
-  if (!r2.ok) alert(r2.error || '保存失败');
+  if (!r2.ok) toastErr(r2.error || '保存失败');
   setSlangMsg(r2.ok ? (slangModalMode === 'confirm' ? '✅ 已确认转正' : '✅ 已保存') : ('❌ ' + (r2.error || '失败')), r2.ok);
   closeSlangModal();
   refreshSlang();
@@ -4418,7 +5072,7 @@ document.getElementById('slangAdd').addEventListener('click', async () => {
   const meaning = document.getElementById('slangMeaning').value.trim();
   const usage = document.getElementById('slangUsage').value.trim();
   const example = document.getElementById('slangExample').value.trim();
-  if (!content) { alert('词条不能为空'); return; }
+  if (!content) { toastInfo('词条不能为空'); return; }
   const r = await api('/api/plugins/slang/add', 'POST', { content, meaning, usage, example });
   document.getElementById('slangMsg').textContent = r.ok ? '✅ 已添加' : ('❌ ' + (r.error || '失败'));
   document.getElementById('slangMsg').className = r.ok ? 'meta ok' : 'meta err';
@@ -4539,13 +5193,20 @@ const consolePages = {
 };
 let currentConsolePage = 'overview';
 let toastTimer;
-function showConsoleToast(message) {
+function showConsoleToast(message, kind = 'info') {
   const toast = document.getElementById('consoleToast');
+  if (!toast) return;
   toast.textContent = message;
+  toast.className = 'toast ' + kind;
+  toast.setAttribute('role', kind === 'err' ? 'alert' : 'status');
   toast.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toast.hidden = true; }, 4200);
+  toastTimer = setTimeout(() => { toast.hidden = true; }, kind === 'err' ? 6500 : 4200);
 }
+function toastOk(message) { showConsoleToast(message, 'ok'); }
+function toastErr(message) { showConsoleToast(message, 'err'); }
+function toastInfo(message) { showConsoleToast(message, 'info'); }
+function toastWarn(message) { showConsoleToast(message, 'warn'); }
 function setConsolePage(page, { updateHash = true, focus = false, target = '' } = {}) {
   if (!Object.hasOwn(consolePages, page)) page = 'overview';
   currentConsolePage = page;
@@ -4564,6 +5225,12 @@ function setConsolePage(page, { updateHash = true, focus = false, target = '' } 
   closeConsoleSearch();
   // 语音库按需加载：进入二代仿真页时才探测（避免每次开控制台都压网关）。
   if (page === 'social-v2' && typeof loadVoiceLibrary === 'function') loadVoiceLibrary();
+  // 黑话列表不再 3 秒轮询：进页立刻拉一次最新的，之后按低频补。
+  if (page === 'slang' && typeof refreshSlang === 'function') refreshSlang();
+  // 链路健康、桥接健康与运行日志：进页即取一次，之后按低频补。
+  if (page === 'overview' && typeof refreshChain === 'function') refreshChain();
+  if (page === 'overview' && typeof refreshHealth === 'function') refreshHealth();
+  if (page === 'operations' && typeof refreshLogs === 'function') refreshLogs();
   if (focus) {
     document.getElementById('mainContent').focus({ preventScroll: true });
     document.getElementById(target || 'mainContent')?.scrollIntoView({ block: 'start', behavior: 'instant' });
@@ -4571,10 +5238,12 @@ function setConsolePage(page, { updateHash = true, focus = false, target = '' } 
 }
 document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => {
   setConsolePage(button.dataset.view, { focus: true, target: button.dataset.target });
+  syncPolling();
 }));
 window.addEventListener('hashchange', () => {
   const page = location.hash.slice(1);
   if (Object.hasOwn(consolePages, page) || !page) setConsolePage(page, { updateHash: false });
+  syncPolling();
 });
 document.querySelector('.skip-link').addEventListener('click', event => {
   event.preventDefault();
@@ -4644,7 +5313,6 @@ const primaryActions = ['roleSet','roleCreate','socialSave','v2ConfigSave','v2Co
 primaryActions.forEach(id => document.getElementById(id)?.classList.add('primary'));
 document.querySelectorAll('.meta[id$="Msg"], .meta[id$="Msg2"]').forEach(el => el.setAttribute('role','status'));
 document.getElementById('section-mode').querySelector('h2').dataset.note = '选择后即时生效';
-document.getElementById('section-activity').querySelector('h2').dataset.note = '每 3 秒自动同步';
 
 const searchInput = document.getElementById('consoleSearch');
 const searchResults = document.getElementById('searchResults');
@@ -5149,10 +5817,420 @@ document.getElementById('usageClear').addEventListener('click', async () => {
 
 setConsolePage(location.hash.slice(1), { updateHash:false });
 
-refresh(); refreshRoles(); refreshWhitelist(); refreshSessions(); refreshPending(); refreshPresets(); loadSocialForm(); loadV2Config(); refreshV2Activity(); loadV2ToolLog(); loadV2SessionOptions(); refreshSocialStatus(); refreshSlang(); loadSlangConfig(); loadSecurity(); refreshSimPrompt(); refreshDshModel(); refreshUsage(); refreshUsageChart(); refreshUsageRecent();
-setInterval(() => { refresh(); refreshSessions(); refreshPending(); refreshSocialStatus(); refreshSlang(); }, 3000);
+refresh(); refreshRoles(); refreshWhitelist(); refreshSessions(); refreshPolicies(); refreshPending(); refreshPresets(); loadSocialForm(); loadV2Config(); refreshV2Activity(); loadV2ToolLog(); loadV2SessionOptions(); refreshSocialStatus(); refreshSlang(); loadSlangConfig(); loadSecurity(); refreshSimPrompt(); refreshDshModel(); refreshUsage(); refreshUsageChart(); refreshUsageRecent(); refreshChain(); refreshHealth(); refreshLogs();
+document.getElementById('policyRefresh')?.addEventListener('click', refreshPolicies);
+// ── 链路健康与运行日志（只读接口）──
+async function refreshChain() {
+  const strip = document.getElementById('chainStrip');
+  if (!strip) return;
+  try {
+    const r = await api('/api/chain');
+    const hops = r.hops || [];
+    const bad = hops.filter((hop) => !hop.ok);
+    strip.innerHTML = hops.map((hop) => {
+      const state = hop.ok ? '正常' : (hop.error === 'timeout' ? '超时' : '未监听');
+      return '<div class="chain-hop ' + (hop.ok ? 'ok' : 'bad') + '">'
+        + '<span class="chain-name">' + esc(hop.label) + ' · ' + hop.port + '</span>'
+        + '<span class="chain-state"><span class="chain-dot" aria-hidden="true"></span>' + state + '</span>'
+        + '<small class="chain-ms">' + (hop.ok ? hop.ms + ' ms' : esc(hop.error || '不可达')) + '</small></div>';
+    }).join('');
+    const msg = document.getElementById('chainMsg');
+    msg.className = 'meta' + (bad.length ? ' err' : '');
+    msg.textContent = (bad.length ? bad.length + ' 跳异常：' + bad.map((hop) => hop.label).join('、') : '全部正常')
+      + ' · 探测于 ' + new Date(r.checkedAt || Date.now()).toLocaleTimeString('zh-CN', { hour12: false });
+  } catch (error) {
+    strip.innerHTML = '<span class="meta err">链路探测失败：' + esc(error.message || error) + '</span>';
+  }
+}
+// ── 桥接健康：/api/health 的只读聚合视图 ─────────────────────────────
+function fmtHealthTokens(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v <= 0) return '0';
+  if (v >= 1e6) return (v / 1e6).toFixed(v >= 1e7 ? 0 : 1) + 'M';
+  if (v >= 1e3) return Math.round(v / 1e3) + 'k';
+  return String(Math.round(v));
+}
+function fmtHealthMs(ms) {
+  const v = Number(ms);
+  if (!Number.isFinite(v) || v <= 0) return '—';
+  return v >= 1000 ? (v / 1000).toFixed(1) + 's' : Math.round(v) + 'ms';
+}
+async function refreshHealth() {
+  const cards = document.getElementById('healthCards');
+  const table = document.getElementById('healthTable');
+  const warningsEl = document.getElementById('healthWarnings');
+  if (!cards || !table) return;
+  try {
+    const h = await api('/api/health');
+    if (!h || h.ok === false) throw new Error(h?.error || '健康接口返回失败');
+    const b = h.bridge || {};
+    const convs = Array.isArray(h.conversations) ? h.conversations : [];
+    const warnings = Array.isArray(h.recentWarnings) ? h.recentWarnings : [];
+    const money = h.tokens && !h.tokens.error
+      ? (h.tokens.symbol || '¥') + Number(h.tokens.today?.cost || 0).toFixed(2)
+      : '—';
+    const tokenHint = h.tokens && !h.tokens.error
+      ? `${Number(h.tokens.today?.turns || 0)} 轮 · ${Number(h.tokens.today?.steps || 0)} 步（今日约）`
+      : (h.tokens?.error || '用量账本不可用');
+    let peak = null;
+    for (const conv of convs) {
+      const ctx = conv.context || {};
+      if (ctx.error || ctx.archived || !Number.isFinite(Number(ctx.pct))) continue;
+      if (!peak || Number(ctx.pct) > Number(peak.pct)) peak = { ...ctx, key: conv.key };
+    }
+    cards.innerHTML = [
+      '<div class="health-card"><span>桥接版本</span><strong>v' + esc(b.version || '未知') + '</strong><small>已运行 ' + esc(fmtAgoMs(b.uptimeMs)) + ' · PID ' + esc(b.pid || '—') + '</small></div>',
+      '<div class="health-card"><span>活跃会话</span><strong>' + esc(b.activeConversations ?? '—') + ' 个</strong><small>' + esc(b.activeTurns ?? 0) + ' 轮执行 · ' + esc(b.queuedPrompts ?? 0) + ' 条排队</small></div>',
+      '<div class="health-card"><span>上下文峰值</span><strong>' + (peak ? esc(peak.pct) + '%' : '—') + '</strong><small>' + (peak ? esc(peak.key) : '暂无会话数据') + '</small></div>',
+      '<div class="health-card" title="自本地零点起，含跨零点桶"><span>今日花费</span><strong>' + esc(money) + '</strong><small>' + esc(tokenHint) + '</small></div>',
+      '<div class="health-card"><span>最近告警</span><strong>' + esc(warnings.length) + ' 条</strong><small>' + (warnings.length ? '看下方最近日志' : '当前日志没有 WARN/ERROR') + '</small></div>'
+    ].join('');
+    table.innerHTML = '<table class="health-table"><thead><tr><th>会话</th><th>状态</th><th>上下文</th><th>预算</th><th>本轮已跑</th><th>最后收到</th><th>操作</th></tr></thead><tbody>'
+      + (convs.length ? convs.map((conv) => {
+        const ctx = conv.context || {};
+        let ctxCell;
+        if (ctx.error) {
+          ctxCell = '<span class="err">' + esc(ctx.error) + '</span>';
+        } else if (ctx.archived) {
+          ctxCell = '<span class="meta">已归档</span>';
+        } else {
+          const pct = Number(ctx.pct);
+          const safePct = Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
+          const cls = safePct >= 80 ? 'bad' : safePct >= 60 ? 'warn' : '';
+          ctxCell = '<div class="health-ctx"><span style="white-space:nowrap">'
+            + esc(fmtHealthTokens(ctx.pressureTokens)) + ' / ' + esc(fmtHealthTokens(ctx.contextWindow))
+            + ' · ' + esc(Number.isFinite(pct) ? pct + '%' : '—')
+            + '</span><span class="health-bar" aria-hidden="true"><i class="' + cls + '" style="width:' + safePct + '%"></i></span></div>';
+        }
+        const budget = Number(conv.contextBudget);
+        const budgetCell = Number.isFinite(budget) && budget > 0
+          ? esc(fmtHealthTokens(budget)) + (conv.overContextBudget ? ' <span class="err">超</span>' : '')
+          : '—';
+        const compactBtn = (ctx.error || ctx.archived) ? '—'
+          : '<button class="small" data-compact-key="' + esc(conv.key) + '"'
+            + ((conv.busy || conv.compacting) ? ' disabled title="会话忙或压缩中"' : ' title="立即压缩该会话上下文"')
+            + '>' + (conv.compacting ? '压缩中' : '压缩') + '</button>';
+        const details = [];
+        if (conv.busyReason) details.push(conv.busyReason);
+        if (conv.queueDepth) details.push('队列 ' + conv.queueDepth);
+        if (conv.pendingWake) details.push('等唤醒');
+        if (conv.activeWait) details.push('wait 中');
+        if (conv.unread) details.push('未读 ' + conv.unread);
+        const stateCell = (conv.busy
+          ? '<span style="color:var(--warn-fg-strong)">忙</span>'
+          : '<span style="color:var(--muted)">空闲</span>')
+          + (details.length ? '<div class="meta">' + esc(details.join(' · ')) + '</div>' : '');
+        const lastSeen = Number.isFinite(Number(conv.lastIncomingAt)) && Number(conv.lastIncomingAt) > 0
+          ? fmtAgoMs(Date.now() - Number(conv.lastIncomingAt)) + '前'
+          : '—';
+        return '<tr><td><code>' + esc(conv.key) + '</code></td><td>' + stateCell + '</td><td>' + ctxCell
+          + '</td><td>' + budgetCell + '</td><td>' + (conv.turnStartedAgoMs ? esc(fmtHealthMs(conv.turnStartedAgoMs)) : '—')
+          + '</td><td class="meta">' + esc(lastSeen) + '</td><td>' + compactBtn + '</td></tr>';
+      }).join('') : '<tr><td colspan="7" class="meta">当前没有已映射的会话。</td></tr>')
+      + '</tbody></table>';
+    table.onclick = (event) => {
+      const btn = event.target.closest('[data-compact-key]');
+      if (!btn || btn.disabled) return;
+      void compactContextNow(btn.getAttribute('data-compact-key'));
+    };
+    if (warningsEl) {
+      warningsEl.innerHTML = warnings.length
+        ? warnings.slice(-3).reverse().map((item) => '<div class="meta err" title="' + esc(item.text) + '">' + esc(item.text) + '</div>').join('')
+        : '<div class="meta">最近 400 行日志里没有 WARN/ERROR。</div>';
+    }
+  } catch (error) {
+    cards.innerHTML = '<span class="meta err">健康数据读取失败：' + esc(error.message || error) + '</span>';
+    table.innerHTML = '<span class="meta err">日志/会话仍可在下方查看。</span>';
+  }
+}
+async function compactContextNow(key) {
+  if (!key) return;
+  if (!confirm(`立即压缩 ${key} 的上下文？\n\n会调用 DSH 的 /compact，保留近期消息并生成摘要；压缩期间这一轮可能短暂变慢。`)) return;
+  try {
+    const r = await api('/api/socialV2/compact', 'POST', { key });
+    if (r && r.ok) {
+      showConsoleToast('✅ 已请求压缩 ' + key, 'ok');
+      setTimeout(refreshHealth, 1200);
+    } else {
+      showConsoleToast('❌ ' + ((r && r.error) || '压缩失败'), 'err');
+    }
+  } catch (error) {
+    showConsoleToast('❌ ' + (error.message || '压缩失败'), 'err');
+  }
+}
+let logQueryTimer = null;
+async function refreshLogs() {
+  const view = document.getElementById('logView');
+  if (!view) return;
+  const params = new URLSearchParams({ file: document.getElementById('logFile').value, lines: document.getElementById('logLines').value });
+  const query = document.getElementById('logQuery').value.trim();
+  if (query) params.set('q', query);
+  const msg = document.getElementById('logMsg');
+  try {
+    const r = await api('/api/logs?' + params.toString());
+    if (!r.ok) throw new Error(r.error === 'not found' ? '接口未启用（重启桥接后生效）' : (r.error || '读取失败'));
+    const pinned = view.scrollTop + view.clientHeight >= view.scrollHeight - 40;
+    view.textContent = r.items.length ? r.items.join('\n') : '（没有匹配的日志行）';
+    if (pinned) {
+      view.scrollTop = view.scrollHeight;
+      // 对齐到整行，避免把首行切掉一半（滚动容器按行高吸附）。
+      const style = getComputedStyle(view);
+      const lineHeight = parseFloat(style.lineHeight) || 0;
+      const paddingTop = parseFloat(style.paddingTop) || 0;
+      if (lineHeight > 0) view.scrollTop = paddingTop + Math.round((view.scrollTop - paddingTop) / lineHeight) * lineHeight;
+    }
+    msg.className = 'meta';
+    msg.textContent = (r.label || '') + ' · 匹配 ' + (r.matched || 0) + ' 行，显示 ' + Math.min(r.matched || 0, r.lines || 0)
+      + ' · 文件 ' + Math.round((r.size || 0) / 1024) + ' KB · 更新于 '
+      + (r.mtime ? new Date(r.mtime).toLocaleString('zh-CN', { hour12: false }) : '—')
+      + (r.truncated ? ' · 已截断' : '');
+  } catch (error) {
+    view.textContent = '';
+    msg.className = 'meta err';
+    msg.textContent = '读取日志失败：' + (error.message || error);
+  }
+}
+document.getElementById('logRefreshBtn').addEventListener('click', refreshLogs);
+document.getElementById('logFile').addEventListener('change', refreshLogs);
+document.getElementById('logLines').addEventListener('change', refreshLogs);
+document.getElementById('logQuery').addEventListener('input', () => {
+  clearTimeout(logQueryTimer);
+  logQueryTimer = setTimeout(refreshLogs, 250);
+});
+document.getElementById('logAuto').addEventListener('change', (event) => { if (event.target.checked) refreshLogs(); });
+setInterval(() => {
+  if (document.hidden || currentConsolePage !== 'operations') return;
+  if (!document.getElementById('logAuto').checked) return;
+  refreshLogs();
+}, 5000);
+// ── 活动日志：把纯文本行拆成可筛选、可搜索的时间线（原文字段保留做对照） ──
+let activitySource = '';
+let activityItems = [];
+let activityCat = 'all';
+let activityQuery = '';
+let activityRenderedAt = '';
+let activityFirstRender = true;
+const activityExpanded = new Set();
+function classifyActivity(text) {
+  if (/^消息已入未读/.test(text)) return 'in';
+  if (/^(工具统一发送|已发送|跳过自动转发|已转发|发送失败)/.test(text)) return 'out';
+  if (/^(AI 内部输出|内部输出)/.test(text)) return 'ai';
+  return 'sys';
+}
+function parseActivityLine(line) {
+  const timed = line.match(/^\[(\d{1,2}:\d{2}:\d{2})\]\s?(.*)$/);
+  const time = timed ? timed[1] : '';
+  let rest = timed ? timed[2] : line;
+  let kind = '';
+  let id = '';
+  let mode = '';
+  const head = rest.match(/^(private|group):(\d+)\s*(?:\[([a-z0-9_-]+)\])?\s*(.*)$/i);
+  if (head) {
+    kind = head[1].toLowerCase();
+    id = head[2];
+    mode = head[3] || '';
+    rest = head[4] || '';
+  }
+  const text = rest.trim();
+  return { time, kind, id, mode, text, cat: classifyActivity(text), key: time + '|' + line.slice(0, 96) };
+}
+function activityModeLabel(mode) {
+  if (!mode) return '';
+  if (mode === 'reserved2') return 'V2';
+  if (mode === 'reserved') return 'V1';
+  if (mode === 'closed-agent') return '封闭';
+  if (mode === 'chat') return '聊天';
+  return mode;
+}
+function activityRowHtml(it) {
+  const open = activityExpanded.has(it.key);
+  const who = it.kind === 'private' ? '私聊' : it.kind === 'group' ? '群' : '桥接';
+  const whoText = who + (it.id ? ' ' + it.id : '');
+  const mode = activityModeLabel(it.mode);
+  return '<div class="activity-row cat-' + it.cat + (open ? ' open' : '') + '" data-activity-key="' + esc(it.key) + '">'
+    + '<span class="activity-time">' + esc(it.time || '—') + '</span>'
+    + '<span class="activity-who"><span class="cat-dot"></span><span class="who-label" title="' + esc(whoText) + '">' + esc(whoText) + '</span>'
+    + (mode ? '<span class="who-mode">' + esc(mode) + '</span>' : '') + '</span>'
+    + '<span class="activity-text" title="' + esc(it.text) + '">' + esc(it.text) + '</span>'
+    + '</div>';
+}
+function renderActivity() {
+  const timeline = document.getElementById('activityTimeline');
+  const pre = document.getElementById('activity');
+  const raw = document.getElementById('activityRaw');
+  const foot = document.getElementById('activityFoot');
+  if (!timeline) return;
+  const rawMode = !!(raw && raw.checked);
+  if (pre) pre.hidden = !rawMode;
+  timeline.hidden = rawMode;
+  if (rawMode) {
+    if (foot) foot.textContent = '原文 · ' + (activitySource ? activitySource.split('\n').filter(Boolean).length : 0) + ' 行';
+    return;
+  }
+  const query = activityQuery.trim().toLowerCase();
+  const items = activityItems.filter((it) => {
+    if (activityCat !== 'all' && it.cat !== activityCat) return false;
+    if (!query) return true;
+    return (it.text + ' ' + it.time + ' ' + it.id).toLowerCase().includes(query);
+  });
+  const counts = { all: activityItems.length, in: 0, out: 0, ai: 0, sys: 0 };
+  activityItems.forEach((it) => { counts[it.cat] += 1; });
+  Object.keys(counts).forEach((key) => {
+    const el = document.getElementById('activityCount' + key.charAt(0).toUpperCase() + key.slice(1));
+    if (el) el.textContent = counts[key];
+  });
+  const pinned = timeline.scrollTop + timeline.clientHeight >= timeline.scrollHeight - 24;
+  if (!items.length) {
+    const emptyText = activityItems.length
+      ? '没有匹配的活动'
+      : '等待桥接写入第一条活动…';
+    timeline.innerHTML = '<div class="activity-empty">' + emptyText + '</div>';
+  } else {
+    timeline.innerHTML = items.map(activityRowHtml).join('');
+  }
+  if (items.length && (pinned || activityFirstRender)) {
+    timeline.scrollTop = timeline.scrollHeight;
+    activityFirstRender = false;
+  }
+  if (foot) {
+    foot.textContent = '显示 ' + items.length + ' / 共 ' + activityItems.length + ' 条 · 最新在底部'
+      + (activityRenderedAt ? ' · 同步于 ' + activityRenderedAt : '');
+  }
+}
+document.querySelectorAll('[data-activity-cat]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    activityCat = btn.dataset.activityCat;
+    document.querySelectorAll('[data-activity-cat]').forEach((b) => {
+      const on = b === btn;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+    renderActivity();
+  });
+});
+let activitySearchTimer = null;
+document.getElementById('activitySearch').addEventListener('input', (event) => {
+  clearTimeout(activitySearchTimer);
+  activitySearchTimer = setTimeout(() => {
+    activityQuery = event.target.value;
+    renderActivity();
+  }, 120);
+});
+document.getElementById('activityRaw').addEventListener('change', renderActivity);
+document.getElementById('activityTimeline').addEventListener('click', (event) => {
+  const text = event.target.closest('.activity-text');
+  if (!text) return;
+  const row = text.closest('.activity-row');
+  if (!row) return;
+  const open = row.classList.toggle('open');
+  if (open) activityExpanded.add(row.dataset.activityKey);
+  else activityExpanded.delete(row.dataset.activityKey);
+});
+// ── 访问与安全：逗号分隔的号码实时解析成 chip，坏号标红，可单独移除 ──
+const WHITELIST_FIELDS = ['wlGroups', 'wlPrivate', 'ownerQQ', 'dnGroups', 'dnPrivate'];
+function parseWhitelistValue(value) {
+  return String(value || '').split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean);
+}
+function renderWhitelistChips() {
+  for (const id of WHITELIST_FIELDS) {
+    const input = document.getElementById(id);
+    const box = document.getElementById(id + 'Chips');
+    if (!input || !box) continue;
+    const tokens = parseWhitelistValue(input.value);
+    if (!tokens.length) {
+      box.innerHTML = '';
+      continue;
+    }
+    const seen = new Set();
+    box.innerHTML = tokens.map((token) => {
+      const shaped = /^\d{5,12}$/.test(token);
+      const valid = shaped && !seen.has(token);
+      seen.add(token);
+      const reason = shaped ? '重复的号码' : '不是 5–12 位数字';
+      return '<span class="chip' + (valid ? '' : ' bad') + '" title="' + (valid ? '有效' : esc(reason)) + '">' + esc(token)
+        + '<button type="button" aria-label="移除 ' + esc(token) + '" data-wl-remove="' + esc(id) + '" data-wl-token="' + esc(token) + '">×</button></span>';
+    }).join('');
+  }
+}
+document.getElementById('section-whitelist').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-wl-remove]');
+  if (!button) return;
+  const input = document.getElementById(button.dataset.wlRemove);
+  if (!input) return;
+  const tokens = parseWhitelistValue(input.value);
+  const index = tokens.indexOf(button.dataset.wlToken);
+  if (index >= 0) tokens.splice(index, 1);
+  input.value = tokens.join(', ');
+  renderWhitelistChips();
+});
+WHITELIST_FIELDS.forEach((id) => {
+  const input = document.getElementById(id);
+  if (input) input.addEventListener('input', renderWhitelistChips);
+});
+// ── 二代仿真：设置项搜索（只影响显示，不改配置） ──
+const v2SearchInput = document.getElementById('v2SettingsSearch');
+if (v2SearchInput) {
+  let v2OpenState = null;
+  v2SearchInput.addEventListener('input', () => {
+    const query = v2SearchInput.value.trim().toLowerCase();
+    const groups = [...document.querySelectorAll('#section-social-v2 details.settings-group')];
+    if (!query) {
+      groups.forEach((d) => { d.hidden = false; if (v2OpenState) d.open = !!v2OpenState.get(d); });
+      v2OpenState = null;
+      return;
+    }
+    if (!v2OpenState) v2OpenState = new Map(groups.map((d) => [d, d.open]));
+    groups.forEach((d) => {
+      const hit = d.textContent.toLowerCase().includes(query);
+      d.hidden = !hit;
+      if (hit) d.open = true;
+    });
+  });
+}
+// ── 轮询：只问当前页需要的接口；标签页隐藏时暂停；切页立即换订阅 ──
+const pollersByPage = {
+  overview: [refreshSessions, refreshPending],
+  sessions: [refreshSessions, refreshPending],
+  'social-v1': [refreshSocialStatus],
+};
+// 黑话列表一个包 150KB：进页时拉一次，之后 15 秒补一次（页内操作会主动刷新）。
+const slowPollersByPage = {
+  slang: [refreshSlang],
+  overview: [refreshChain, refreshHealth],
+};
+let pollTimer = null;
+let slowPollTimer = null;
+function syncPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  if (slowPollTimer) clearInterval(slowPollTimer);
+  const extra = pollersByPage[currentConsolePage] || [];
+  pollTimer = setInterval(() => {
+    if (document.hidden) return;
+    refresh();
+    for (const fn of extra) fn();
+  }, 3000);
+  const slow = slowPollersByPage[currentConsolePage] || [];
+  if (slow.length) {
+    slowPollTimer = setInterval(() => {
+      if (document.hidden) return;
+      for (const fn of slow) fn();
+    }, 15000);
+  }
+}
+syncPolling();
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  refresh();
+  for (const fn of pollersByPage[currentConsolePage] || []) fn();
+  for (const fn of slowPollersByPage[currentConsolePage] || []) fn();
+});
+// 待处理徽标在任何页都要准：非会话页低频补拉（响应只有几十字节）。
+setInterval(() => {
+  if (document.hidden) return;
+  if (!(pollersByPage[currentConsolePage] || []).includes(refreshPending)) refreshPending();
+}, 15000);
 // 用量看板只在本页可见时轮询：既保证「实时」，又不让其它页白白多打两份接口。
-setInterval(() => { if (currentConsolePage !== 'usage') return; refreshUsage(); refreshUsageChart(); refreshUsageRecent(); }, 3000);
+setInterval(() => { if (document.hidden || currentConsolePage !== 'usage') return; refreshUsage(); refreshUsageChart(); refreshUsageRecent(); }, 3000);
 // 主题切换（纯前端，不发任何请求；选择写入 localStorage，未选择时跟随系统）
 (function () {
   var root = document.documentElement;

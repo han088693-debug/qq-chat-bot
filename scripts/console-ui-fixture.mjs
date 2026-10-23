@@ -339,16 +339,55 @@ export function makeFixtureState() {
   };
 }
 
+/** 人味仪表盘（离线演示数据，全部虚构）。字段与控制台 loadPersonaAudit() 一一对应。 */
+function fixturePersonaAudit(key, days) {
+  return {
+    ok: true,
+    key,
+    generatedAt: Date.now(),
+    window: { messages: 240, botTexts: 96, days, activityEntries: 380 },
+    turns: {
+      humanRuns: 58, botRuns: 61, humanMessages: 132, botMessages: 96,
+      replyRate: 0.83, repliesPerHumanMessage: 0.73, answerGapMedianMs: 2400,
+      maxBurst: 3, burstHistogram: [0, 12, 9, 4], singleReplyShare: 0.78, strictAlternation: false,
+    },
+    length: {
+      bot: { n: 96, mean: 18.4, sd: 9.1, p50: 16, p90: 32, max: 58 },
+      human: { n: 132, mean: 12.7, sd: 7.3, p50: 10, p90: 24, max: 44 },
+    },
+    toolTrace: { n: 96, hits: 3, rate: 0.031, samples: ['qq_get_recent_messages · 2026-10-23T10:12'] },
+    repeat: { n: 96, unique: 88, dupRate: 0.083, top: [{ text: '哈哈哈哈', count: 3 }] },
+    latency: {
+      n: 96, meanSec: 6.2, p50Sec: 4.4, p90Sec: 12.8, maxSec: 41.2,
+      under5: 52, from5to15: 33, from15to60: 11, over60: 0, proactive: 7,
+    },
+    monologue: {
+      internalOutputs: 12, sends: 96, ratio: 0.125, handoverHits: 2,
+      handoverSamples: ['我先去别处看看', '有需要再叫我'],
+    },
+    memory: { styleNotes: 6, styleAvoid: 3, fewshots: 4, memberImpressions: 9, affection: 2, activeTopics: 5 },
+    verdicts: [
+      { level: 'good', text: '话轮配比健康：bot 单条占比 78%，没有连发刷屏。' },
+      { level: 'warn', text: '句长 18.4 字略长，真人 12.7 字，可以再短一点。' },
+      { level: 'bad', text: '工具名/链接痕迹 3 条，会让人看出「不是真人」。' },
+    ],
+  };
+}
+
 /** Bind only to loopback. Mutations affect this server's disposable in-memory state. */
 export async function startConsoleFixture({ port = 0, original = false, htmlPath, logWrites = false } = {}) {
   const file = htmlPath || resolve(projectRoot, original ? 'scripts/fixtures/console.before.html' : 'public/console.html');
   await readFile(file); // Fail early rather than displaying a broken preview.
   const state = makeFixtureState();
+  const policies = new Map();
   const requests = [];
   const unknownRequests = [];
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
-    const path = url.pathname;
+    const rawPath = url.pathname;
+    // 控制台改走 /api/plugins/slang/*（插件化后的正式路径）；离线 fixture 仍按 /api/slang/* 实现，
+    // 这里做一次前缀归一化，记录 requests 时仍用 rawPath，保证契约文件里写的是真路径。
+    const path = url.pathname.replace(/^\/api\/plugins\//, '/api/');
     const method = req.method || 'GET';
     const json = (value, status = 200) => {
       res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -371,13 +410,45 @@ export async function startConsoleFixture({ port = 0, original = false, htmlPath
         const chunks = [];
         for await (const chunk of req) chunks.push(chunk);
         body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
-        requests.push({ method, path, body });
+        requests.push({ method, path: rawPath, body });
         if (logWrites) console.log(`[mock write] ${method} ${path} ${JSON.stringify(body)}`);
       }
       if (method === 'GET') {
         switch (path) {
           case '/api/status': return json({ ok: true, dshReady: true, mode: state.mode, role: state.role, roleMode: state.roleMode, closedAgentPreset: state.closedAgentPreset, ownerQQ: state.whitelist.ownerQQ, allowGroups: state.whitelist.allow.groups, allowPrivate: state.whitelist.allow.private, activity: '[08:30:00] 演示桥接已连接\n[08:30:12] group:123456789 · 已处理一条消息\n[08:30:20] 二代社交助手正在运行\n以上均为离线模拟数据。' });
           case '/api/presets': return json({ presets: [{ id: 'qq-chat-v2', trust: 'user' }, { id: 'qq-chat', trust: 'user' }] });
+          // 插件化后的黑话列表（正式接口形状：entries + config + writable）
+          case '/api/slang/list': return json({ ok: true, entries: state.slang, config: state.slangConfig, writable: true });
+          // 人味仪表盘：控制台 loadPersonaAudit() 直接读取这些字段
+          case '/api/persona/audit': return json(fixturePersonaAudit(url.searchParams.get('key') || 'private:10001', Number(url.searchParams.get('days')) || 1));
+          // 健康面板（只读 GET，不写基线）；数据刻意做成「一忙一闲一告警」
+          case '/api/health': return json({
+            ok: true,
+            generatedAt: Date.parse(timestamp),
+            bridge: {
+              version: '0.2.0-r5', pid: 12345, startedAt: Date.parse(timestamp) - 7200000,
+              uptimeMs: 7200000, mode: state.mode, role: state.role, closedAgentPreset: state.closedAgentPreset,
+              dshReady: true, socialV2Paused: false, activeConversations: 3, activeTurns: 1,
+              queuedPrompts: 2, pendingWakeKeys: 1, activeWaits: 0, restartsInLog: 1
+            },
+            snowluma: { connected: true, accountOnline: true, good: true, lastPacketAgoMs: 1200, lastPacketKind: 'meta_event/heartbeat', degraded: false, hint: null },
+            tokens: { today: { cost: 1.23, tokens: 4567890, turns: 12, steps: 40 }, hours: 8, currency: 'CNY', symbol: '¥', estimated: false },
+            conversations: [
+              { key: 'private:10001', sessionId: 'session-demo-a', busy: true, busyReason: 'promptRunning', queueDepth: 2, promptRunning: true, pendingWake: true, pendingWakeReasons: 1, activeWait: false, unread: 3, lastIncomingAt: Date.parse(timestamp) - 45000, lastAiReplyAt: Date.parse(timestamp) - 120000, turnStartedAgoMs: 42000, context: { pressureTokens: 798408, projectedTokens: 798424, contextWindow: 1000000, pct: 79.8, breakdown: { systemTokens: 4694, toolsTokens: 16966, messageTokens: 366058 }, sessionStats: { turns: 156, steps: 1476, llmMs: 3836311, toolMs: 31438875, ttftMs: 3035243 } } },
+              { key: 'private:10002', sessionId: 'session-demo-b', busy: false, busyReason: null, queueDepth: 0, promptRunning: false, pendingWake: false, pendingWakeReasons: 0, activeWait: false, unread: 0, lastIncomingAt: Date.parse(timestamp) - 3600000, lastAiReplyAt: Date.parse(timestamp) - 3500000, turnStartedAgoMs: null, context: { pressureTokens: 218125, projectedTokens: 218142, contextWindow: 1000000, pct: 21.8, breakdown: { systemTokens: 4694, toolsTokens: 16966, messageTokens: 90110 }, sessionStats: { turns: 19, steps: 158, llmMs: 356703, toolMs: 4239293, ttftMs: 232276 } } },
+              { key: 'group:123456', sessionId: 'session-demo-c', busy: false, busyReason: null, queueDepth: 0, promptRunning: false, pendingWake: false, pendingWakeReasons: 0, activeWait: false, unread: 0, lastIncomingAt: null, lastAiReplyAt: null, turnStartedAgoMs: null, context: { error: 'DSH 未就绪' } }
+            ],
+            recentWarnings: [{ text: '[08:30:20] [bridge] 演示告警：SnowLuma 连接正在重试' }]
+          });
+          // 运行日志查看器与链路健康（都是只读 GET，不写基线）
+          case '/api/logs': return json({ ok: true, file: 'current', label: 'state/bridge.log', size: 4096, mtime: Date.parse(timestamp), matched: 3, truncated: false, lines: 400, items: ['[08:30:00] [bridge] 演示桥接已连接', '[08:30:12] [bridge] 收到一条消息', '[08:30:20] [bridge] 以上均为离线模拟数据'] });
+          case '/api/chain': return json({ ok: true, checkedAt: Date.parse(timestamp), hops: [
+            { id: 'dsh', label: 'DSH API', port: 3080, ok: true, ms: 3 },
+            { id: 'agent', label: 'QQ Agent', port: 3210, ok: true, ms: 2 },
+            { id: 'snowluma', label: 'SnowLuma', port: 5099, ok: true, ms: 4 },
+            { id: 'onebot', label: 'OneBot', port: 3001, ok: true, ms: 2 },
+            { id: 'tap', label: 'SideTap', port: 8100, ok: false, ms: 700, error: 'timeout' }
+          ] });
           case '/api/roles': return json({
             roles: state.roles.slice(),
             summaries: state.roles.map((name) => {
@@ -447,6 +518,19 @@ export async function startConsoleFixture({ port = 0, original = false, htmlPath
             globalSideEffect: true,
           });
           case '/api/whitelist': return json(state.whitelist);
+          case '/api/socialV2/policy': {
+            const key = url.searchParams.get('key') || 'group:123456';
+            const policy = policies.get(key) || null;
+            return json({
+            ok: true,
+            key,
+            policy,
+            modeAllowed: true,
+            effective: { model: policy?.model || 'deepseek-flash', reasoningEffort: policy?.reasoningEffort || 'high' },
+            presetIds: ['qq-chat-v2'],
+            globalMode: 'reserved2',
+            });
+          }
           case '/api/sessions': return json({ sessions: state.sessions });
           case '/api/pending': return json({ pending: [{ key: 'group:123456789', kind: 'approval', toolName: '演示工具', reason: '等待管理员确认（离线示例）' }] });
           case '/api/social': return json({ config: state.social, states: state.socialStates, pendingSummaries: { 'group:123456789': 2 } });
@@ -509,6 +593,14 @@ export async function startConsoleFixture({ port = 0, original = false, htmlPath
       }
       if (method === 'POST') {
         switch (path) {
+          case '/api/socialV2/policy':
+            if (body.clear) policies.delete(body.key);
+            else policies.set(body.key, { ...policies.get(body.key), ...body });
+            return json({ ok: true });
+          case '/api/socialV2/compact':
+            return json(body.key === 'private:10001'
+              ? { ok: false, error: '演示会话正忙' }
+              : { ok: true, queued: true });
           case '/api/mode': state.mode = body.mode; state.closedAgentPreset = body.closedAgentPreset; return json({ ok: true, dshSynced: true });
           case '/api/role': state.role = body.role; return json({ ok: true });
           case '/api/roles/create': state.roles.push(body.name); state.roleContents[body.name] = body.content ?? ''; return json({ ok: true, role: body.name, warnings: [] });
@@ -560,6 +652,7 @@ export async function startConsoleFixture({ port = 0, original = false, htmlPath
             });
           }
           case '/api/slang/config': state.slangConfig = body; return json({ ok: true });
+          case '/api/slang/add':
           case '/api/slang': state.slang.push({ ...body, id: `demo-${state.slang.length + 1}`, status: 'confirmed', source: 'manual', count: 1 }); return json({ ok: true });
           case '/api/security':
             if (body.rehardenStateDir === true) {
@@ -605,8 +698,9 @@ export async function startConsoleFixture({ port = 0, original = false, htmlPath
         else Object.assign(entry, body, slangMatch[2] ? { status: slangMatch[2] === 'confirm' ? 'confirmed' : 'rejected' } : {});
         return json({ ok: true });
       }
-      unknownRequests.push({ method, path });
-      return json({ ok: false, error: `Unimplemented fixture route: ${method} ${path}` }, 404);
+      unknownRequests.push({ method, path: rawPath });
+      if (process.env.FIXTURE_LOG_404) console.log(`[fixture 404] ${method} ${rawPath}`);
+      return json({ ok: false, error: `Unimplemented fixture route: ${method} ${rawPath}` }, 404);
     } catch (error) {
       json({ ok: false, error: error.message }, 500);
     }

@@ -37,6 +37,7 @@ let browser;
 const results = [];
 const errors = [];
 const blockedRequests = [];
+const dialogs = [];
 async function test(name, fn) {
   const start = Date.now();
   try { await fn(); results.push({ name, ok: true, durationMs: Date.now() - start }); console.log(`PASS ${name}`); }
@@ -57,7 +58,7 @@ try {
   page.setDefaultTimeout(8000);
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  page.on('dialog', dialog => dialog.accept());
+  page.on('dialog', dialog => { dialogs.push(dialog.message()); dialog.accept(); });
   await page.goto(fixture.url);
   await page.waitForFunction(() => document.getElementById('v2AgentPreset')?.value === 'qq-chat-v2' && document.getElementById('wlGroups')?.value.includes('123456789'));
 
@@ -84,13 +85,19 @@ try {
   async function check(id, checked) { await (await reveal(`#${id}`)).setChecked(checked); }
   async function clickWrite(selector, path, method = 'POST') {
     const target = await reveal(selector);
-    const [response] = await Promise.all([
-      page.waitForResponse(r => new URL(r.url()).pathname === path && r.request().method() === method),
-      target.click(),
-    ]);
-    assert.equal(response.status(), 200, `${method} ${path} should succeed`);
-    assert.equal((await response.json()).ok, true);
-    return fixture.requests.at(-1)?.body;
+    try {
+      const [response] = await Promise.all([
+        page.waitForResponse(r => new URL(r.url()).pathname === path && r.request().method() === method),
+        target.click(),
+      ]);
+      assert.equal(response.status(), 200, `${method} ${path} should succeed`);
+      assert.equal((await response.json()).ok, true);
+      return fixture.requests.at(-1)?.body;
+    } catch (error) {
+      console.error(`[diag] ${method} ${path} via ${selector} failed: ${error.message}`);
+      console.error(`[diag] page=${page.url()} recent=${JSON.stringify(fixture.requests.slice(-3))} unknown=${JSON.stringify(fixture.unknownRequests.slice(-3))} dialogs=${JSON.stringify(dialogs.slice(-3))}`);
+      throw error;
+    }
   }
 
   await test('All 225 legacy IDs remain present and every DOM ID is unique', async () => {
@@ -159,11 +166,18 @@ try {
     // 只验证按钮确实发起「重新检测」请求，**不**写进/触发 baseline 的写载荷契约
     // （baseline 记录的是改版前控制台的表单写载荷，这条不算表单写）。
     await page.waitForFunction(() => document.getElementById('stateDirReharden') !== null);
+    // 这条只为验证按钮会发请求；它不属于「改版前控制台表单写载荷」，录完从日志里摘掉，
+    // 否则 baseline 会多出一条只在新版控制台才存在的写请求。
+    const recordedBefore = fixture.requests.length;
     const [request] = await Promise.all([
       page.waitForRequest(r => new URL(r.url()).pathname === '/api/security' && r.method() === 'POST'),
       page.click('#stateDirReharden'),
     ]);
     assert.deepEqual(JSON.parse(request.postData() || '{}'), { rehardenStateDir: true });
+    // fixture 侧是异步记录的，等它落盘后再按内容摘掉，别按索引猜（请求可能还在路上）。
+    for (let i = 0; i < 100 && fixture.requests.length <= recordedBefore; i += 1) await new Promise(r => setTimeout(r, 20));
+    const rehardenAt = fixture.requests.findIndex(x => x.method === 'POST' && x.path === '/api/security' && x.body?.rehardenStateDir === true);
+    if (rehardenAt >= 0) fixture.requests.splice(rehardenAt, 1);
     await page.waitForFunction(() => document.getElementById('stateDirWarn')?.style.display === 'none');
   });
 
@@ -214,7 +228,7 @@ try {
 
   await test('Slang add, search, confirm modal, tab switching and parameter contracts', async () => {
     for (const [id, value] of Object.entries({ slangContent: '测试词条', slangMeaning: '很棒', slangUsage: '赞美', slangExample: '这个效果很棒。' })) await fill(id, value);
-    assert.deepEqual(await clickWrite('#slangAdd', '/api/slang'), { content: '测试词条', meaning: '很棒', usage: '赞美', example: '这个效果很棒。' });
+    assert.deepEqual(await clickWrite('#slangAdd', '/api/plugins/slang/add'), { content: '测试词条', meaning: '很棒', usage: '赞美', example: '这个效果很棒。' });
     await (await reveal('.slang-tab[data-slang-tab="confirmed"]')).click();
     await fill('slangSearchConfirmed', '测试词条');
     assert.equal(await page.locator('#slangConfirmedList tbody tr').count(), 2, 'Filtered table should contain header and one entry');
@@ -228,7 +242,7 @@ try {
     assert.deepEqual(await clickWrite('#slangModalDirectConfirm', '/api/slang/demo-candidate/confirm'), { meaning: '感到安慰', usage: '轻松聊天', example: '有被治愈到。', risk: '无', sources: ['https://example.invalid/offline-source'] });
     await fill('slangExtractMin', 14);
     await fill('slangThresholds', '3，6 12');
-    const config = await clickWrite('#slangConfigSave', '/api/slang/config');
+    const config = await clickWrite('#slangConfigSave', '/api/plugins/slang/config');
     assert.equal(config.extractMinMessages, 14);
     assert.deepEqual(config.inferenceThresholds, [3, 6, 12]);
   });
@@ -250,7 +264,19 @@ try {
     console.log(`Recorded original API contracts: ${baselinePath}`);
   } else await test('All submitted payloads exactly match the pre-redesign console baseline', async () => {
     const expected = JSON.parse(await readFile(baselinePath, 'utf8'));
-    assert.deepEqual(fixture.requests, expected);
+    try {
+      assert.deepEqual(fixture.requests, expected);
+    } catch (error) {
+      const sig = (list) => list.map(x => `${x.method} ${x.path}`).join(' | ');
+      console.error(`[diag] baseline ${expected.length} writes: ${sig(expected)}`);
+      console.error(`[diag] actual   ${fixture.requests.length} writes: ${sig(fixture.requests)}`);
+      expected.forEach((want, index) => {
+        const got = fixture.requests[index];
+        if (JSON.stringify(got) === JSON.stringify(want)) return;
+        console.error(`[diag] write #${index} expected=${JSON.stringify(want)} actual=${JSON.stringify(got)}`);
+      });
+      throw error;
+    }
   });
 
   if (!original) await test('Token usage panel renders totals, per-conversation and per-turn cost', async () => {
@@ -549,6 +575,60 @@ try {
     await page.locator('#dshEffortSelect').selectOption('max');
     await page.locator('#dshEffortSave').click();
     await page.waitForFunction(() => document.getElementById('dshEffortSelect').value === 'max');
+  });
+
+  if (!original) await test('会话策略保存和清除回读，mode 与 preset 保持只读', async () => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await navigate('sessions');
+    await page.locator('#policyRefresh').click();
+    await page.waitForFunction(() => document.querySelectorAll('[data-policy-save]').length > 0);
+    const row = page.locator('tr[data-policy-key]').first();
+    const key = await row.getAttribute('data-policy-key');
+    assert.equal(await row.locator('[data-policy-mode]').isDisabled(), true);
+    assert.equal(await row.locator('[data-policy-preset]').isDisabled(), true);
+    await row.locator('[data-policy-model]').fill('fixture-model');
+    await row.locator('[data-policy-effort]').selectOption('low');
+    const [saved] = await Promise.all([
+      page.waitForResponse(r => new URL(r.url()).pathname === '/api/socialV2/policy' && r.request().method() === 'POST'),
+      row.locator('[data-policy-save]').click(),
+    ]);
+    assert.deepEqual(saved.request().postDataJSON(), { key, model: 'fixture-model', reasoningEffort: 'low' });
+    await page.waitForFunction(() => document.querySelector('[data-policy-model]')?.value === 'fixture-model'
+      && document.querySelector('[data-policy-effort]')?.value === 'low');
+    const [cleared] = await Promise.all([
+      page.waitForResponse(r => new URL(r.url()).pathname === '/api/socialV2/policy' && r.request().method() === 'POST'),
+      row.locator('[data-policy-clear]').click(),
+    ]);
+    assert.deepEqual(cleared.request().postDataJSON(), { key, clear: true });
+    await page.waitForFunction(() => document.querySelector('[data-policy-model]')?.value === ''
+      && document.querySelector('[data-policy-effort]')?.value === '');
+  });
+
+  if (!original) await test('健康面板拒绝忙碌会话按钮，空闲压缩只请求模拟接口', async () => {
+    await reveal('[data-compact-key="private:10001"]');
+    assert.equal(await page.locator('[data-compact-key="private:10001"]').isDisabled(), true);
+    assert.equal(await page.locator('#healthTable tbody tr').nth(2).locator('td').nth(5).textContent(), '—');
+    const idle = await reveal('[data-compact-key="private:10002"]');
+    const [response] = await Promise.all([
+      page.waitForResponse(r => new URL(r.url()).pathname === '/api/socialV2/compact'),
+      idle.click(),
+    ]);
+    assert.deepEqual(response.request().postDataJSON(), { key: 'private:10002' });
+    assert.equal((await response.json()).queued, true);
+  });
+
+  if (!original) await test('聊天指标必须明确选择会话，空白输入不会自动读取私聊', async () => {
+    await navigate('persona');
+    await page.locator('#auditKey').fill('');
+    await page.locator('#auditRefresh').click();
+    assert.match(await page.locator('#auditMsg').textContent(), /请输入会话 key/);
+    assert.equal(await page.locator('#auditKey').inputValue(), '');
+    await page.locator('#auditKey').fill('private:10001');
+    const [response] = await Promise.all([
+      page.waitForResponse(r => new URL(r.url()).pathname === '/api/persona/audit'),
+      page.locator('#auditRefresh').click(),
+    ]);
+    assert.equal(new URL(response.url()).searchParams.get('key'), 'private:10001');
   });
 
   if (artifacts) {
