@@ -16,6 +16,10 @@ import * as forward from '../src/forward.js';
 import * as slang from '../src/slang-learner.js';
 import * as sticker from '../src/sticker-lib.js';
 import * as stickerMemory from '../src/sticker-memory.js';
+import * as stickerUsage from '../src/sticker-usage.js';
+import * as stickerTaste from '../src/sticker-taste.js';
+import * as stickerMedia from '../src/sticker-media.js';
+import { createStickerCatalog } from '../src/sticker-catalog.js';
 import * as hotTrends from '../src/hot-trends.js';
 import * as modelPrices from '../src/model-prices.js';
 import * as tokenLedger from '../src/token-ledger.js';
@@ -30,6 +34,7 @@ import * as stateAcl from '../src/state-acl.mjs';
 import * as reminders from '../src/reminders.js';
 import * as diaryLib from '../src/diary-lib.js';
 import * as holidays from '../src/holidays.js';
+import * as crossMemory from '../src/cross-memory-lib.js';
 import * as styleLearner from '../src/style-learner.js';
 import { unwrap, createTurnCollector } from '../src/dsh-client.js';
 
@@ -132,6 +137,7 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
     sendToQQ, sendStickerV2, handleIncoming, startConsoleServer, cfg, state, api, promptQueues,
     getSocialV2State, appendSocialV2Message, recordSentMessagesV2,
     buildWakePromptV2, buildWakeSnapshotV2, sendWakePromptV2, evaluateWakeTriggerV2, socialV2,
+    formatCrossMemoryV2,
     refreshMode, modeAllowed, trackTurnEvent, replayPendingWakeReasonsV2,
     collectors, setupSleepTimerV2,
     getInitialPrompt, setInitialPrompt, loadInitialPrompts, formatInitialPromptV2,
@@ -175,10 +181,15 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
     SnowLumaWebSocketClient: FakeBot, text: (s) => s,
     discoverDshLaunchToken: () => '', unwrap, createTurnCollector,
     ...markdown, ...sensitive, ...wait, ...safeFetch, ...forward, ...slang, ...sticker,
-    ...stickerMemory, ...hotTrends,
+    ...stickerMemory, ...stickerUsage, ...stickerTaste, ...stickerMedia, ...hotTrends,
+    createStickerCatalog: (options) => createStickerCatalog({
+      ...options,
+      fetchImpl: async () => { throw new Error('offline fixture: gallery network disabled'); },
+    }),
     ...modelPrices, ...tokenLedger, ...voiceLib, ...stateAcl, ...presetPrompt, ...roleCard,
     ...wakeRoleCard, ...wakeExtras, ...outgoingFilter, ...personaAudit,
-    ...reminders, ...diaryLib, ...holidays, ...styleLearner,
+    ...reminders, ...diaryLib, ...holidays, ...styleLearner, ...crossMemory,
+    crossDisplayName: crossMemory.displayName,
     // bridge.js 顶层有 `const execFileAsync = promisify(execFile)`（图片降采样用），
     // 测试里不该真的 spawn ffmpeg：桩成"什么都不产出"，prepareImageForModel 会走失败回退分支。
     execFile: () => {},
