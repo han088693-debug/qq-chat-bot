@@ -10,6 +10,8 @@
   },
   "scripts": {
     "start": "node src/bridge.js",
+    "social:archive": "node scripts/archive-stale-social-v2.mjs",
+    "test:maintenance": "node --test scripts/test-safe-fetch-proxy-policy.mjs scripts/test-archive-stale-social-v2.mjs scripts/test-runtime-maintenance.mjs",
     "test:audit": "node scripts/test-audit.mjs",
     "test:optional": "node --test scripts/test-optional-modules.mjs scripts/test-optional-phone.mjs",
     "test:patrol": "node --test scripts/test-qzone-patrol.mjs scripts/test-qzone-patrol-integration.mjs scripts/test-qzone-social.mjs scripts/test-qzone-watcher.mjs",

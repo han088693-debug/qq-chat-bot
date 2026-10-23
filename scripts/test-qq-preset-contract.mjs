@@ -47,27 +47,27 @@ test('snapshots are optional, partial snapshots require reading, and watermarks 
   assert.match(prefix, /首次进入会话、角色变化[^。]*qq_get_prompt/);
 });
 
-test('one closing action can acknowledge the read watermark after the full observation', () => {
-  assert.match(prefix, /qq_mark_read\(throughSeq=/);
-  assert.match(prefix, /qq_set_wake_config\(config=[^)]*throughSeq=/);
-  assert.match(prefix, /不需先 mark_read/);
-  assert.match(prefix, /qq_wait_for_messages\(timeoutMs=300000\)/);
-  assert.match(prefix, /短等待不能代替/);
-  assert.match(prefix, /preSleepWaitRemainingMs[^。]*继续等待/);
-  assert.match(prefix, /若你参与回复[^。]*重新观察/);
+test('one closing action can acknowledge the read watermark without a client-side observation', () => {
+  assert.match(prefix, /qq_send_message[^。]*throughSeq/);
+  assert.match(prefix, /nextWake/);
+  assert.match(prefix, /不发送、只收尾[^。]*qq_mark_read/);
+  assert.match(prefix, /qq_set_wake_config/);
+  assert.match(prefix, /不要再用 qq_wait_for_messages 做 2 分钟沉睡前观察/);
+  assert.match(prefix, /桥接会在服务端等 2 分钟安静窗口/);
+  assert.match(prefix, /你若参与了回复[^。]*重新起安静窗口/);
 });
 
-test('pre-reply quiet checks, waiting for replies and pre-sleep observation have distinct instructions', () => {
+test('pre-reply quiet checks, waiting for replies and server-side sleep window have distinct instructions', () => {
   assert.match(prefix, /先理解并处理当前消息/);
   assert.match(prefix, /【首答前】[^\n]*qq_wait_for_messages\(purpose="reply", quietMs=10000\)/);
   assert.match(prefix, /读取和思考花掉的时间也算，已安静足够就立即返回/);
   assert.match(prefix, /不要再重开一次普通长等待/);
   assert.match(prefix, /预算到但 quiet=false 不等于对方说完/);
-  assert.match(prefix, /【等下文】[^\n]*purpose="messages", timeoutMs=60000~120000/);
-  assert.match(prefix, /【回复后】[^\n]*qq_wait_for_messages\(purpose="messages"\)/);
-  assert.match(prefix, /短静默不算沉睡前观察/);
-  assert.match(prefix, /5 分钟观察不是回复的前置条件/);
-  assert.match(prefix, /只有准备收尾时[^。]*preSleepWaitRemainingMs/);
+  assert.match(prefix, /【等下文】[^\n]*purpose="messages", timeoutMs=30000~60000/);
+  assert.match(prefix, /【回复后】[^\n]*不要为了等回复长轮询/);
+  assert.match(prefix, /普通等待约 30 秒、最多 60 秒/);
+  assert.match(prefix, /服务端等 2 分钟安静窗口/);
+  assert.match(prefix, /对方明确说“不聊了\/晚安\/下了\/拜拜”等结束语时可直接收/);
 });
 
 test('social autonomy and visual, forwarding, sticker and web capabilities remain described', () => {
@@ -88,8 +88,8 @@ test('social autonomy and visual, forwarding, sticker and web capabilities remai
 test('autonomy limits and the observation escape hatch stay described', () => {
   // These rules were previously unguarded: deleting any of them left every test green.
   for (const text of [
-    // 沉睡前观察唯一的逃生口：明确结束语可以跳过 5 分钟等待。
-    '除非对方明确“不聊了/晚安/下了/拜拜”等结束语',
+    // 收尾逃生口：明确结束语可以跳过服务端安静窗口。
+    '对方明确说“不聊了/晚安/下了/拜拜”等结束语时可直接收',
     // [SILENT] 是桥接的退出标记，误用会静默吞掉回复。
     '不要用 [SILENT]',
     // 记忆面
