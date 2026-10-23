@@ -6,6 +6,8 @@
 
 **第一次安装，从 [中文教程](docs/QUICKSTART.md) 开始。** 扩展能力按 [可选功能总教程](docs/OPTIONAL_FEATURES.md) 逐项配置；消息流转见 [功能与流程](docs/ARCHITECTURE.md)，分享代码或日志前看 [隐私说明](docs/guides/PRIVACY.md)。
 
+2026-10-23 已合入本地 `r5` 的表情筛选、外部图库、会话配额与部分发送成功处理，保留本仓库的可选空间模块及发布配置。跨私聊记忆和开发控制通道默认关闭；配置与升级说明见 [r5 更新说明](docs/guides/R5_UPDATE.md)。
+
 ## 能做什么
 
 | 能力 | 说明 |
