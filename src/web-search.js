@@ -12,15 +12,17 @@
 // 凭据解析顺序与 DSH 一致：
 //   1. config.json 的 `webSearch.apiKey`（不推荐，明文）
 //   2. 环境变量 `DEEPSEEK_API_KEY`（可用 `webSearch.apiKeyEnv` 改）
-//   3. DSH 的 `$DSH_HOME/.credentials.yaml` → `refs.<ref>`（DSH 的 Models 页写入的 key）
-// 都没有时：回退 Bing（`cn.bing.com` 的 RSS，失败再退回 HTML），保证"永远有一个能用的搜索"。
+//   3. DSH 的 `$DSH_HOME/.credentials.yaml` → `refs.<ref>`（旧版 DSH 的 API key）
+//   4. 同文件的 `records['deepseek-account-platform/default'].payload.token`
+//      （DSH 登录 DeepSeek 的账号授权；用 `x-dsh-auth-token` 头发送，不是 API key）
+// 都没有时：回退 DuckDuckGo（HTML 结果页，实测可用），再回退 Bing（RSS，失败再 HTML）。
 //
 // 安全边界：
-// - API key 只发往**校验过**的 HTTPS 端点：必须是 https、必须解析到公网地址
-//   （防止把 key 发到 localhost/内网），且禁止跟随重定向（`redirect: error`）。
-// - key 永远不写日志、不进错误信息、不进返回结果。
+// - API key / 账号 token 只发往**校验过**的 HTTPS 端点：必须是 https、必须解析到
+//   非内网地址（防止把凭据发到 localhost/内网），且禁止跟随重定向（`redirect: error`）。
+// - 凭据永远不写日志、不进错误信息、不进返回结果。
 // - 响应体有大小上限；请求有总超时；查询词在 MCP 层已清洗。
-// - Bing 走 safe-fetch（SSRF 防护 + 多地址故障切换）。
+// - Bing/DDG 走 safe-fetch（SSRF 防护 + 多地址故障切换 + 响应解压）。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -66,7 +68,7 @@ export function loadSearchConfig(root) {
     file = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
   } catch {}
   const raw = file?.webSearch && typeof file.webSearch === 'object' && !Array.isArray(file.webSearch) ? file.webSearch : {};
-  const provider = raw.provider === 'deepseek' || raw.provider === 'bing' ? raw.provider : 'auto';
+  const provider = raw.provider === 'deepseek' || raw.provider === 'ddg' || raw.provider === 'bing' ? raw.provider : 'auto';
   return {
     ...defaultConfig,
     provider,
@@ -112,6 +114,41 @@ export function resolveSearchApiKey(config) {
   const fromDsh = readDshCredential(envName);
   if (fromDsh) return { key: fromDsh, source: 'dsh-credentials' };
   return { key: '', source: 'none' };
+}
+
+/**
+ * 从 DSH 凭据文件里取 DeepSeek **账号授权**（登录 DSH 时写入的 grant）。
+ * 结构：`records['deepseek-account-platform/default'].payload.token`。
+ * 这个 token 不是 API key：DSH 的搜索 provider 用 `x-dsh-auth-token` 头发它。
+ */
+export function readDshAccountToken() {
+  try {
+    const doc = YAML.load(fs.readFileSync(path.join(resolveDshHome(), '.credentials.yaml'), 'utf8'));
+    const records = doc?.records && typeof doc.records === 'object' ? doc.records : {};
+    const keys = ['deepseek-account-platform/default', ...Object.keys(records).sort()];
+    for (const key of keys) {
+      const token = records?.[key]?.payload?.token;
+      if (typeof token === 'string' && token.trim()) return { token: token.trim(), record: key };
+    }
+  } catch {}
+  return { token: '', record: '' };
+}
+
+/**
+ * 解析搜索鉴权：API key（config/env/refs）优先，其次 DSH 账号 token。
+ * @returns {{kind:'api-key',key:string,source:string}|{kind:'account',token:string,source:string}|{kind:'none',source:string}}
+ */
+export function resolveSearchAuth(config) {
+  const literal = String(config?.apiKey ?? '').trim();
+  if (literal) return { kind: 'api-key', key: literal, source: 'config' };
+  const envName = String(config?.apiKeyEnv || DEFAULT_API_KEY_ENV);
+  const fromEnv = String(process.env[envName] ?? '').trim();
+  if (fromEnv) return { kind: 'api-key', key: fromEnv, source: 'env' };
+  const fromDsh = readDshCredential(envName);
+  if (fromDsh) return { kind: 'api-key', key: fromDsh, source: 'dsh-credentials' };
+  const account = readDshAccountToken();
+  if (account.token) return { kind: 'account', token: account.token, source: `dsh-account:${account.record}` };
+  return { kind: 'none', source: 'none' };
 }
 
 function normalizeSearchUrl(raw) {
@@ -287,9 +324,9 @@ async function postJson(url, addresses, options) {
 
 /** DeepSeek 原生联网搜索。失败时抛出带稳定 code 的错误，由调用方决定是否回退。 */
 export async function deepseekSearch(query, config = defaultConfig) {
-  const { key } = resolveSearchApiKey(config);
-  if (!key) {
-    throw Object.assign(new Error('没有可用的 DeepSeek API key'), { code: 'NO_KEY' });
+  const auth = resolveSearchAuth(config);
+  if (auth.kind === 'none') {
+    throw Object.assign(new Error('没有可用的 DeepSeek 搜索凭据（API key 或 DSH 账号登录）'), { code: 'NO_KEY' });
   }
   const baseURL = config.baseURL || process.env.DEEPSEEK_SEARCH_BASE_URL || DEFAULT_BASE_URL;
   const { url, addresses } = await validateSearchEndpoint(baseURL);
@@ -305,12 +342,16 @@ export async function deepseekSearch(query, config = defaultConfig) {
       type: SEARCH_TOOL_TYPE,
       name: 'web_search',
       max_uses: config.maxUses || defaultConfig.maxUses
-    }]
+    }],
+    thinking: { type: 'disabled' }
   });
+  // DSH 的账号登录用 x-dsh-auth-token；旧式 API key 用 x-api-key + Bearer。
+  const authHeaders = auth.kind === 'account'
+    ? { 'x-dsh-auth-token': auth.token }
+    : { 'x-api-key': auth.key, authorization: `Bearer ${auth.key}` };
   const response = await postJson(endpoint, addresses, {
     headers: {
-      'x-api-key': key,
-      authorization: `Bearer ${key}`,
+      ...authHeaders,
       'anthropic-version': DEFAULT_API_VERSION,
       'content-type': 'application/json',
       accept: 'application/json',
@@ -320,13 +361,16 @@ export async function deepseekSearch(query, config = defaultConfig) {
     timeoutMs: config.timeoutMs || DEFAULT_TIMEOUT_MS
   });
   if (response.status < 200 || response.status >= 300) {
-    // 只回显 HTTP 状态与主体里的简短错误，绝不拼接请求头（里面是 key）。
+    // 只回显 HTTP 状态与主体里的简短错误，绝不拼接请求头（里面是凭据）。
     let detail = '';
     try {
       const parsed = JSON.parse(response.text);
       const message = typeof parsed?.error === 'string' ? parsed.error : parsed?.error?.message ?? parsed?.message;
       if (typeof message === 'string') detail = message.slice(0, 200);
     } catch {}
+    if (response.status === 401 && auth.kind === 'account') {
+      detail = `${detail ? `${detail}；` : ''}DSH 的 DeepSeek 账号授权被拒绝，需要重新登录 DeepSeek`;
+    }
     throw Object.assign(
       new Error(`DeepSeek 搜索接口 HTTP ${response.status}${detail ? `：${detail}` : ''}`),
       { code: 'HTTP_ERROR', status: response.status }
@@ -432,6 +476,55 @@ export async function bingSearch(query, config = defaultConfig) {
   return parseBingHtml(res.body, maxResults);
 }
 
+/** DuckDuckGo HTML 结果页里的 `//duckduckgo.com/l/?uddg=...` 跳转还原成真实 URL。 */
+export function decodeDdgHref(href) {
+  const s = String(href ?? '').trim();
+  if (!s) return '';
+  try {
+    if (/^(?:\/\/)?duckduckgo\.com\/l\//i.test(s)) {
+      const u = new URL(s.startsWith('//') ? `https:${s}` : s);
+      const target = u.searchParams.get('uddg');
+      if (target) return decodeURIComponent(target);
+    }
+  } catch {}
+  return s;
+}
+
+/** 解析 DuckDuckGo HTML 结果页（无 JS、结构稳定；链接是 uddg 跳转）。 */
+export function parseDdgHtml(html, maxResults = 8) {
+  const text = String(html ?? '');
+  const results = [];
+  const seen = new Set();
+  const linkRe = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  const matches = [...text.matchAll(linkRe)];
+  for (let i = 0; i < matches.length && results.length < maxResults; i += 1) {
+    const m = matches[i];
+    const url = normalizeSearchUrl(decodeDdgHref(decodeEntities(m[1])));
+    if (!url || seen.has(url)) continue;
+    const end = i + 1 < matches.length ? matches[i + 1].index : m.index + 4000;
+    const chunk = text.slice(m.index, end);
+    const snip = chunk.match(/class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/(?:a|div)>/i);
+    seen.add(url);
+    results.push({
+      title: decodeEntities(m[2]).slice(0, 200) || url,
+      url,
+      ...(snip ? { snippet: decodeEntities(snip[1]).slice(0, 500) } : {})
+    });
+  }
+  return results;
+}
+
+/** DuckDuckGo 搜索（HTML 结果页，无需 key；本机实测比 Bing RSS 稳定得多）。 */
+export async function ddgSearch(query, config = defaultConfig) {
+  const url = new URL('https://html.duckduckgo.com/html/');
+  url.searchParams.set('q', query);
+  const res = await safeFetch(url.toString(), 512000);
+  if (res.statusCode < 200 || res.statusCode >= 300) throw new Error(`DuckDuckGo 搜索 HTTP ${res.statusCode}`);
+  const results = parseDdgHtml(res.body, config.maxResults || defaultConfig.maxResults);
+  if (!results.length) throw new Error('DuckDuckGo 没有解析到结果');
+  return results;
+}
+
 const cache = new Map(); // `${provider}|${query}` -> { at, value }
 
 export function clearSearchCache() {
@@ -439,8 +532,9 @@ export function clearSearchCache() {
 }
 
 /**
- * 统一入口：按配置选择 provider；`auto` 先试 DeepSeek（与 DSH 同源），失败回退 Bing。
- * @returns {{query:string, provider:'deepseek'|'bing', results:object[], fallbackFrom?:string, note?:string}}
+ * 统一入口：按配置选择 provider；`auto` 先试 DeepSeek（与 DSH 同源），
+ * 失败回退 DuckDuckGo（HTML），再失败回退 Bing（RSS→HTML）。
+ * @returns {{query:string, provider:'deepseek'|'duckduckgo'|'bing', results:object[], fallbackFrom?:string, note?:string}}
  */
 export async function webSearch(query, options = {}) {
   const q = String(query ?? '').trim();
@@ -455,6 +549,10 @@ export async function webSearch(query, options = {}) {
     const results = await deepseekSearch(q, config);
     return { query: q, provider: 'deepseek', results };
   };
+  const attemptDdg = async () => {
+    const results = await ddgSearch(q, config);
+    return { query: q, provider: 'duckduckgo', results };
+  };
   const attemptBing = async () => {
     const results = await bingSearch(q, config);
     return { query: q, provider: 'bing', results };
@@ -463,6 +561,8 @@ export async function webSearch(query, options = {}) {
   let value;
   if (wanted === 'deepseek') {
     value = await attemptDeepSeek();
+  } else if (wanted === 'ddg') {
+    value = await attemptDdg();
   } else if (wanted === 'bing') {
     value = await attemptBing();
   } else {
@@ -471,13 +571,17 @@ export async function webSearch(query, options = {}) {
     } catch (error) {
       const reason = error?.code === 'NO_KEY' ? '未配置 DeepSeek 搜索凭据' : `DeepSeek 搜索不可用：${error?.message ?? error}`;
       try {
-        value = await attemptBing();
-      } catch (bingError) {
-        // 两个后端都失败时把**两边**的原因都带出来，否则调用方只会看到 Bing 的错，
-        // 完全不知道 DeepSeek 这一路为什么不行（排查时最需要的信息）。
-        throw new Error(`${reason}；Bing 兜底也失败：${bingError?.message ?? bingError}`);
+        value = await attemptDdg();
+        value = { ...value, fallbackFrom: 'deepseek', note: `${reason}，已回退 DuckDuckGo` };
+      } catch (ddgError) {
+        try {
+          value = await attemptBing();
+          value = { ...value, fallbackFrom: 'deepseek', note: `${reason}，DuckDuckGo 也失败（${ddgError?.message ?? ddgError}），已回退 Bing` };
+        } catch (bingError) {
+          // 全部失败时把三边原因都带出来，否则调用方不知道卡在哪一步。
+          throw new Error(`${reason}；DuckDuckGo 也失败：${ddgError?.message ?? ddgError}；Bing 兜底也失败：${bingError?.message ?? bingError}`);
+        }
       }
-      value = { ...value, fallbackFrom: 'deepseek', note: `${reason}，已回退 Bing` };
     }
   }
   // 空结果必须显式说明：以前直接返回 `results: []`，模型分不清「真没搜到」和

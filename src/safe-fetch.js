@@ -9,15 +9,17 @@ import dns from 'node:dns';
 import net from 'node:net';
 import http from 'node:http';
 import https from 'node:https';
-import { StringDecoder } from 'node:string_decoder';
+import zlib from 'node:zlib';
 
 const dnsLookup = dns.promises.lookup;
 
-// 本机代理（Clash/V2Ray 等）的 fake-IP 模式会把公网域名解析到 198.18.0.0/15
-// （RFC 2544 基准测试段，不是真实内网）。SSRF 防护默认把整段当内网拒绝，
-// 于是腾讯图片/表情 CDN 全部报「域名解析到内网/本机地址，已阻止」。
-// 这里只对**腾讯媒体 CDN 的域名**放行 fake-IP；其它任何域名解析到 198.18/15 仍然拒绝。
+// 保留腾讯媒体域名的代理 fake-IP 例外。仅 DNS 返回基准测试段，不能证明本机
+// 已配置可信代理；其他域名默认仍拒绝。确认使用可信本机代理后，部署者可显式
+// 设置 SAFE_FETCH_ALLOW_FAKE_IP=1。SAFE_FETCH_BLOCK_FAKE_IP=1 优先禁用所有
+// fake-IP 例外，包括腾讯媒体；私网/环回/链路本地/CGNAT 和 IP 字面量始终拒绝。
 const PROXY_FAKE_IP_SUFFIXES = ['.qq.com', '.qq.com.cn', '.qpic.cn', '.gtimg.cn'];
+const ALLOW_PROXY_FAKE_IP = process.env.SAFE_FETCH_ALLOW_FAKE_IP === '1';
+const BLOCK_PROXY_FAKE_IP = process.env.SAFE_FETCH_BLOCK_FAKE_IP === '1';
 
 /** 是否为代理 fake-IP 段（IPv4 198.18.0.0/15 或 IPv6 2001:2::/48）。 */
 export function isProxyFakeIp(ip) {
@@ -180,8 +182,8 @@ export async function resolveSafeAddresses(hostname) {
   if (!addresses.length) throw new Error('域名没有解析结果');
   for (const { address } of addresses) {
     if (!isPrivateIp(address)) continue;
-    // 代理 fake-IP：只对腾讯媒体 CDN 域名放行；其它域名仍按内网拒绝。
-    if (isProxyFakeIp(address) && isTrustedMediaHost(h)) continue;
+    // 泛域名例外必须显式开启；强制禁用开关优先于所有例外。
+    if (isProxyFakeIp(address) && !BLOCK_PROXY_FAKE_IP && (ALLOW_PROXY_FAKE_IP || isTrustedMediaHost(h))) continue;
     throw new Error('域名解析到内网/本机地址，已阻止');
   }
   const ordered = orderAddresses(addresses);
@@ -215,6 +217,28 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 function validateLimit(value, name) {
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${name} 必须为正整数`);
+}
+
+// 文本响应先收原始字节、读完再按 Content-Encoding 解压：服务端（尤其 bilibili）
+// 常常无视 Accept-Encoding 直接回 gzip，逐块 StringDecoder 会把压缩流解成乱码。
+const MAX_RAW_TEXT_BYTES = 16 * 1024 * 1024;
+
+/** 按 Content-Encoding 解压响应体（gzip/deflate/br）；解不开时原样返回。 */
+export function decodeResponseBody(buffer, encoding) {
+  const enc = String(encoding || '').trim().toLowerCase();
+  if (!enc || enc === 'identity' || !buffer?.length) return buffer;
+  try {
+    if (enc === 'gzip' || enc === 'x-gzip') return zlib.gunzipSync(buffer);
+    if (enc === 'deflate') {
+      try {
+        return zlib.inflateSync(buffer);
+      } catch {
+        return zlib.inflateRawSync(buffer);
+      }
+    }
+    if (enc === 'br') return zlib.brotliDecompressSync(buffer);
+  } catch {}
+  return buffer;
 }
 
 /**
@@ -254,6 +278,7 @@ function attemptOnce(url, address, limit, binary, budgetMs) {
           'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36',
           accept: binary ? 'image/*,*/*;q=0.8' : 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'accept-language': 'zh-CN,zh;q=0.9',
+          ...(binary ? {} : { 'accept-encoding': 'gzip, deflate, br' }),
         },
         servername: url.protocol === 'https:' && !net.isIP(hostname) ? hostname : undefined,
         rejectUnauthorized: url.protocol === 'https:',
@@ -274,24 +299,13 @@ function attemptOnce(url, address, limit, binary, budgetMs) {
           return;
         }
         const chunks = [];
-        const decoder = binary ? null : new StringDecoder('utf8');
+        const maxRaw = binary ? limit : MAX_RAW_TEXT_BYTES;
         let size = 0;
-        const appendText = (text) => {
-          const points = Array.from(text);
-          const remaining = limit - size;
-          chunks.push(points.slice(0, remaining).join(''));
-          size += Math.min(points.length, remaining);
-          if (size >= limit) {
-            done({ statusCode, body: chunks.join(''), truncated: true });
-            res.destroy();
-          }
-        };
         res.on('data', (chunk) => {
           if (settled) return;
-          if (!binary) { appendText(decoder.write(chunk)); return; }
           size += chunk.length;
-          if (size > limit) {
-            fail(new Error(`图片超过大小限制（${limit} 字节）`), false);
+          if (size > maxRaw) {
+            fail(new Error(binary ? `图片超过大小限制（${limit} 字节）` : `响应体超过上限（${maxRaw} 字节）`), false);
             res.destroy();
             return;
           }
@@ -299,11 +313,14 @@ function attemptOnce(url, address, limit, binary, budgetMs) {
         });
         res.on('end', () => {
           if (settled) return;
-          if (binary) done({ statusCode, buffer: Buffer.concat(chunks) });
-          else {
-            appendText(decoder.end());
-            done({ statusCode, body: chunks.join(''), truncated: false });
+          const raw = Buffer.concat(chunks);
+          if (binary) {
+            done({ statusCode, buffer: raw });
+            return;
           }
+          const decoded = decodeResponseBody(raw, res.headers['content-encoding']).toString('utf8');
+          const points = Array.from(decoded);
+          done({ statusCode, body: points.slice(0, limit).join(''), truncated: points.length > limit });
         });
       });
       req.on('timeout', () => {

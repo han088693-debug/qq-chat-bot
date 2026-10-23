@@ -637,7 +637,7 @@ server.tool(
 
 server.tool(
   'qq_mark_read',
-  '将指定会话已查看的未读消息标记为已读。throughSeq 使用最近读取结果的 readThroughSeq，避免清除读取后才到达的新消息；省略 throughSeq 会按旧行为清空当前全部未读，因此推荐始终带上水位。注意：每次设置潜水/下一次唤醒前，桥接要求先用 qq_wait_for_messages(timeoutMs=300000) 完成一次沉睡前观察：5 分钟内没人说话可 mark_read 收尾沉睡；期间有人发新消息则先查看 newMessages，判断不需要你参与也可直接 mark_read 收尾；若你参与了回复，则下次想睡需重新等待观察窗口。',
+  '将指定会话已查看的未读消息标记为已读。throughSeq 使用最近读取结果的 readThroughSeq，避免清除读取后才到达的新消息；省略 throughSeq 会按旧行为清空当前全部未读，因此推荐始终带上水位。决定潜水/收尾时直接 mark_read 即可，不需要先用 qq_wait_for_messages 做长时间观察；桥接会在服务端等 2 分钟安静窗口，期间有人发新消息会自动取消潜水并叫醒你。',
   {
     key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
     token: z.string().describe('会话令牌（见唤醒提示中的【会话令牌】）'),
@@ -655,7 +655,7 @@ server.tool(
 
 server.tool(
   'qq_set_wake_config',
-  '设置指定会话的二代唤醒配置：mode/无限期或有限时间/提前唤醒条件（@、名字、关键词、提问、拍一拍、概率、anyMessage、指定成员）。triggers.speakerIds 是可选的“指定群友发言唤醒”：填一个或多个群友 QQ 号后，只要其中任意一位在群里发言就会唤醒你；不设置则不启用。适合在等某个人回复、或某人反应慢怕错过时使用。triggers.poke 开启后，群里有人拍一拍（包括拍你或拍别人）会唤醒你。注意：每次设置潜水/下一次唤醒前需先用 qq_wait_for_messages(timeoutMs=300000) 完成一次沉睡前观察：5 分钟内没人说话可设置并沉睡；期间有人发新消息则先查看 newMessages，判断不需要你参与可直接设置并沉睡；若你参与了回复，则下次想睡需重新等待观察窗口。',
+  '设置指定会话的二代唤醒配置：mode/无限期或有限时间/提前唤醒条件（@、名字、关键词、提问、拍一拍、概率、anyMessage、指定成员）。triggers.speakerIds 是可选的“指定群友发言唤醒”：填一个或多个群友 QQ 号后，只要其中任意一位在群里发言就会唤醒你；不设置则不启用。适合在等某个人回复、或某人反应慢怕错过时使用。triggers.poke 开启后，群里有人拍一拍（包括拍你或拍别人）会唤醒你。决定潜水/收尾时直接设置即可，不需要先用 qq_wait_for_messages 做长时间观察；桥接会在服务端等 2 分钟安静窗口，期间有人发新消息会自动取消潜水并叫醒你。',
   {
     key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
     token: z.string().describe('会话令牌（见唤醒提示中的【会话令牌】）'),
@@ -732,7 +732,7 @@ server.tool(
 
 server.tool(
   'qq_send_message',
-  '统一发送工具：一次调用 = 一次完整回复。messages 可传一条或多条文字，stickerId 可选追加一张表情（QQ 收藏，或仅私聊可用的外部梗图 ext:…；表情会作为最后一条独立气泡发出）。桥接按真人节奏逐条发送，整次回复只进入一次冷却（文字、图片、表情共用同一个会话冷却，以接口返回的剩余秒数为准）。因此不要把“多条文字”或“文字+表情”拆成多次工具调用，否则第二次会撞冷却。字符串=一条消息，数组=多条消息；每个字符串内部不要用空格分隔中文短句，需要多条请用数组元素；每条消息要读起来完整，不要把同一句话拆到两条里。只有以下情况才需要传 replyToMessageId 引用：① 你这条消息指向的人或消息并非最新一条别人的消息（也就是你在回更早的某条）；② 你连续几句话里不同消息指代的是不同的消息或不同的人。其他情况（上下文唯一、刚在接同一条最新消息）不要引用，别让对方猜，也别为了用工具而用。',
+  '统一发送工具：一次调用 = 一次完整回复。messages 可传一条或多条文字，stickerId 可选追加一张表情（QQ 收藏，或仅私聊可用的外部梗图 ext:…；表情会作为最后一条独立气泡发出）。桥接按真人节奏逐条发送，整次回复只进入一次冷却（文字、图片、表情共用同一个会话冷却，以接口返回的剩余秒数为准）。因此不要把“多条文字”或“文字+表情”拆成多次工具调用，否则第二次会撞冷却。字符串=一条消息，数组=多条消息；每个字符串内部不要用空格分隔中文短句，需要多条请用数组元素；每条消息要读起来完整，不要把同一句话拆到两条里。只有以下情况才需要传 replyToMessageId 引用：① 你这条消息指向的人或消息并非最新一条别人的消息（也就是你在回更早的某条）；② 你连续几句话里不同消息指代的是不同的消息或不同的人。其他情况（上下文唯一、刚在接同一条最新消息）不要引用，别让对方猜，也别为了用工具而用。一次调用可以同时完成发送、标已读、设下一次唤醒：能收尾时带 throughSeq / nextWake，不要再拆成三次工具调用；nextWake 字段同 qq_set_wake_config 的 config。',
   {
     key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
     token: z.string().describe('会话令牌（见唤醒提示中的【会话令牌】）'),
@@ -743,9 +743,27 @@ server.tool(
     atUserId: z.union([z.number(), z.string()]).optional().describe('要 @ 的群成员 QQ 号（群聊中用于点名某个人；与引用二选一即可，不要滥用）'),
     gapMode: z.enum(['auto', 'fixed', 'byLength']).optional().describe('auto=桥接随机；fixed=固定间隔；byLength=按字数计算'),
     gapMs: z.number().optional().describe('fixed 模式下的统一间隔（毫秒）'),
-    gaps: z.array(z.number()).optional().describe('fixed 模式下逐条间隔（长度=条数-1）')
+    gaps: z.array(z.number()).optional().describe('fixed 模式下逐条间隔（长度=条数-1）'),
+    throughSeq: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional().describe('发送成功后一起确认已读：用最近读取结果的 readThroughSeq；只有至少发出一条才生效，失败不回滚已发送消息'),
+    nextWake: z.object({
+      mode: z.enum(['diving', 'active']).optional().describe('diving=潜水，active=活跃（anyMessage 开启）'),
+      infinite: z.boolean().optional().describe('true=无限期，只有条件命中才唤醒；false=有限时间'),
+      sleepMs: z.number().optional().describe('有限潜水毫秒数（从当前时间起算）'),
+      sleepUntil: z.string().optional().describe('有限潜水截止时间 ISO 字符串，优先级高于 sleepMs'),
+      triggers: z.object({
+        atMention: z.boolean().optional(),
+        nameMention: z.boolean().optional(),
+        speakerIds: z.array(z.union([z.number(), z.string()])).max(20).optional(),
+        keywords: z.array(z.string()).optional(),
+        question: z.boolean().optional(),
+        poke: z.boolean().optional(),
+        anyMessage: z.boolean().optional(),
+        probability: z.number().optional()
+      }).optional(),
+      batchWindowMs: z.number().optional().describe('多条消息合并唤醒窗口（毫秒，>=1000）')
+    }).optional().describe('发送成功后一起设置下一次唤醒（字段同 qq_set_wake_config 的 config）；设置失败只返回 wakeSet=false，不影响已发送消息')
   },
-  async ({ key, token, messages, stickerId, stickerAuto, replyToMessageId, atUserId, gapMode, gapMs, gaps }) => {
+  async ({ key, token, messages, stickerId, stickerAuto, replyToMessageId, atUserId, gapMode, gapMs, gaps, throughSeq, nextWake }) => {
     try {
       let finalMessages = messages;
       if (typeof finalMessages === 'string') {
@@ -767,7 +785,7 @@ server.tool(
       }
       const data = await agentApi('/api/socialV2/send-message', {
         method: 'POST',
-        body: JSON.stringify({ key, messages: finalMessages, stickerId: stickerId ? String(stickerId) : undefined, stickerAuto: stickerAuto === true, replyToMessageId, atUserId: atUserId ?? null, gapMode, gapMs, gaps }),
+        body: JSON.stringify({ key, messages: finalMessages, stickerId: stickerId ? String(stickerId) : undefined, stickerAuto: stickerAuto === true, replyToMessageId, atUserId: atUserId ?? null, gapMode, gapMs, gaps, throughSeq, nextWake }),
         headers: { 'x-agent-token': token },
         timeoutMs: 300000
       });
@@ -805,12 +823,12 @@ if (cfg.socialV2?.tools?.sendPoke !== false) {
 
 server.tool(
   'qq_wait_for_messages',
-  '等待分两种用途。首答前已读消息、只想确认有没有补充：用 purpose="reply"，按最后来信时间补足 quietMs 静默，已安静足够就立即返回；读取/思考时新到的消息也会返回，新消息重算静默。timeoutMs 是最长预算，不要求等满；预算到但 quiet=false 不代表对方已说完。此用途绝不代替沉睡前观察。等对方继续说、等回复或睡前观察：用默认 purpose="messages"；先等新消息，收到后才按 quietMs 等静默，没有新消息会等到 timeoutMs，单传 quietMs 不会缩短总等待。静默下限由后台配置，默认 10000ms。直接看 newMessages、unreadCount 和 readThroughSeq，返回消息无需重复查询；仍有未展示未读才补读。决定潜水/收尾时才用默认用途加 timeoutMs=300000 完成沉睡前观察，不能把 5 分钟观察放在首答之前；短等待不能代替。全程无人说话返回 preSleepWaitSatisfied=true；观察期间来了新消息返回 preSleepWaitObserved=true，读后不需参与可收尾，参与回复则下次收尾重新观察。preSleepWaitRemainingMs 仅供准备收尾时参考。',
+  '等待分两种用途。首答前已读消息、只想确认有没有补充：用 purpose="reply"，按最后来信时间补足 quietMs 静默，已安静足够就立即返回；读取/思考时新到的消息也会返回，新消息重算静默。timeoutMs 是最长预算，不要求等满；预算到但 quiet=false 不代表对方已说完。等对方继续说或等回复：用默认 purpose="messages"；先等新消息，收到后才按 quietMs 等静默，没有新消息会等到 timeoutMs，单传 quietMs 不会缩短总等待。静默下限由后台配置，默认 10000ms。直接看 newMessages、unreadCount 和 readThroughSeq，返回消息无需重复查询；仍有未展示未读才补读。收尾/潜水不再需要用本工具做 2 分钟长观察：直接设置 mark_read 或 wake_config 即可，桥接会在服务端等安静窗口；长等待只用于确实想等对方补话的场景。',
   {
     key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
     token: z.string().describe('会话令牌（见唤醒提示中的【会话令牌】）'),
-    purpose: z.enum(['messages', 'reply']).optional().describe('默认 messages：等新消息/回复/睡前观察；reply：回复前短静默，计入最后来信后已过去的时间，绝不授予睡前观察资格'),
-    timeoutMs: z.number().optional().describe('等待预算毫秒数，默认 30000、最大 600000；reply 达到静默即返回，不必等满；沉睡前观察用 messages 并传 300000'),
+    purpose: z.enum(['messages', 'reply']).optional().describe('默认 messages：等新消息/回复；reply：回复前短静默，计入最后来信后已过去的时间。收尾/潜水不需要本工具长等待'),
+    timeoutMs: z.number().optional().describe('等待预算毫秒数，默认 30000、最大 600000；reply 达到静默即返回，不必等满；messages 只在确实想等对方补话时用'),
     minNewMessages: z.number().optional().describe('仅 messages 用途：至少等到多少条新消息才进入静默窗口，默认 1；reply 用途会忽略它'),
     quietMs: z.number().optional().describe('静默窗口毫秒数，建议 10000~12000；reply 从最后来信开始计时，messages 只在等到新消息后计时；后台默认至少 10000')
   },
