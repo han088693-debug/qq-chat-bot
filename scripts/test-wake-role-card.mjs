@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { composeRoleLine, roleCardRecordMatches, shouldInjectRoleCard } from '../src/wake-role-card.mjs';
 
 const card = '# 测试卡\n\n正文';
-const rec = { role: '蓝色大肥鱼-示例角色3', sha: 'a'.repeat(64), sessionId: 's1' };
+const rec = { role: 'fixture-long-role-name', sha: 'a'.repeat(64), sessionId: 's1' };
 
-assert.equal(roleCardRecordMatches(rec, { roleName: '蓝色大肥鱼-示例角色3', sha: 'a'.repeat(64), sessionId: 's1' }), true);
-assert.equal(roleCardRecordMatches(rec, { roleName: '蓝色大肥鱼-示例角色3', sha: 'a'.repeat(64), sessionId: 's2' }), false);
+assert.equal(roleCardRecordMatches(rec, { roleName: 'fixture-long-role-name', sha: 'a'.repeat(64), sessionId: 's1' }), true);
+assert.equal(roleCardRecordMatches(rec, { roleName: 'fixture-long-role-name', sha: 'a'.repeat(64), sessionId: 's2' }), false);
 assert.equal(roleCardRecordMatches(rec, { roleName: '别的', sha: 'a'.repeat(64), sessionId: 's1' }), false);
-assert.equal(roleCardRecordMatches(rec, { roleName: '蓝色大肥鱼-示例角色3', sha: 'b'.repeat(64), sessionId: 's1' }), false);
+assert.equal(roleCardRecordMatches(rec, { roleName: 'fixture-long-role-name', sha: 'b'.repeat(64), sessionId: 's1' }), false);
 assert.equal(roleCardRecordMatches(null, { roleName: 'x', sha: '', sessionId: '' }), false);
 
 assert.equal(shouldInjectRoleCard({ reason: 'bootstrap', hasCompactionNotice: false, recorded: true }), true);

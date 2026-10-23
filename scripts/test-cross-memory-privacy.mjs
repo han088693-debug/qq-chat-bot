@@ -55,3 +55,10 @@ test('turning cross-chat memory off stops further injection immediately', () =>
     h.cfg.socialV2.crossMemory.enabled = false;
     assert.equal(h.formatCrossMemoryV2('private:10002'), '');
   }));
+
+test('an empty current private allowlist excludes registered historical peers', () =>
+  fixture({ enabled: true }, h => {
+    assert.match(h.formatCrossMemoryV2('private:10002'), /PEER_PRIVATE_MARKER/);
+    h.cfg.allow.private = [];
+    assert.equal(h.formatCrossMemoryV2('private:10002'), '');
+  }));

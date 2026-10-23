@@ -152,9 +152,11 @@ test('静默检测不得声称能判断 hook 死活（心跳是本地生成的�
 test('/api/status 暴露 snowluma 健康快照，且只给操作者', () => {
   assert.match(bridgeCode, /snowluma: snowlumaHealthSnapshot\(\)/, '/api/status 必须带 snowluma 字段');
   // 智能体视图（带 x-agent-token 的那支）不得包含它
+  const statusAt = bridgeCode.indexOf("url.pathname === '/api/status'");
+  const snapshotAt = bridgeCode.indexOf('snowluma: snowlumaHealthSnapshot()', statusAt);
   const agentBranch = bridgeCode.slice(
-    bridgeCode.indexOf("req.headers['x-agent-token'] || req.headers['x-agent-call'] !== undefined"),
-    bridgeCode.indexOf('snowluma: snowlumaHealthSnapshot()'),
+    bridgeCode.indexOf("req.headers['x-agent-token'] || req.headers['x-agent-call'] !== undefined", statusAt),
+    snapshotAt,
   );
   assert.ok(agentBranch.length > 0, '应能定位智能体分支与操作者分支');
   assert.ok(
