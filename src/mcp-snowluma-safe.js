@@ -162,15 +162,35 @@ async function agentApi(path, init = {}) {
   let body = null;
   try { body = await res.json(); } catch { body = null; }
   if (!res.ok) {
-    throw new Error(errorText(body?.error, `桥接 API HTTP ${res.status}`));
+    const error = new Error(errorText(body?.error, `桥接 API HTTP ${res.status}`));
+    error.statusCode = res.status;
+    error.body = body;
+    throw error;
   }
   // 桥接的部分端点会用 200 + {ok:false,error} 表达业务失败（例如发送被审计拦截）。
   // 不检查 body.ok 会把「被拦截」当成「发送成功」上报给模型 —— 模型据此认为消息已发出，
   // 于是不再重试也不告诉用户，是典型的静默错误。
   if (body && typeof body === 'object' && body.ok === false) {
-    throw new Error(errorText(body.error, '桥接 API 返回 ok:false（未说明原因）'));
+    const error = new Error(errorText(body.error, '桥接 API 返回 ok:false（未说明原因）'));
+    error.body = body;
+    throw error;
   }
   return body;
+}
+
+/**
+ * 发送类工具的失败文案：桥接的部分成功响应（sent/partial/stickerSkipped）
+ * 不能让模型误以为「全都失败了」而整批重发。这里把已落地的部分明确写出来。
+ */
+function agentSendErrorText(error, prefix) {
+  const body = error?.body;
+  const bits = [];
+  if (Number(body?.sent) > 0) bits.push(`已发出 ${Number(body.sent)} 条`);
+  if (body?.partial) bits.push('本次属于部分成功');
+  if (body?.stickerSkipped) bits.push('表情没有发出');
+  if (body?.stickerWarning) bits.push(`表情未发：${String(body.stickerWarning).slice(0, 120)}`);
+  const tail = bits.length ? `（${bits.join('；')}；不要重发已经发出的部分）` : '';
+  return `${prefix}：${error?.message ?? error}${tail}`;
 }
 
 /**
@@ -297,7 +317,7 @@ async function legacyReadToolAllowed() {
   return String(status?.mode ?? '') === 'closed-agent';
 }
 
-const server = new McpServer({ name: 'snowluma-safe', version: '0.2.0-r4' });
+const server = new McpServer({ name: 'snowluma-safe', version: '0.2.0-r5' });
 
 // ── 工具开关必须在**注册期**生效，而不是只在校验期 ──────────────────────────
 //
@@ -712,19 +732,20 @@ server.tool(
 
 server.tool(
   'qq_send_message',
-  '统一发送工具：一次调用 = 一次完整回复。messages 可传一条或多条文字，stickerId 可选追加一张收藏表情（表情会作为最后一条独立气泡发出）。桥接按真人节奏逐条发送，全部发完后整次回复只进入一次冷却（时长与原来相同：默认私聊 30 秒、群聊 2 分钟，以接口返回的剩余秒数为准）。因此不要把“多条文字”或“文字+表情”拆成多次工具调用，否则第二次会撞冷却。字符串=一条消息，数组=多条消息；每个字符串内部不要用空格分隔中文短句，需要多条请用数组元素；每条消息要读起来完整，不要把同一句话拆到两条里。只有以下情况才需要传 replyToMessageId 引用：① 你这条消息指向的人或消息并非最新一条别人的消息（也就是你在回更早的某条）；② 你连续几句话里不同消息指代的是不同的消息或不同的人。其他情况（上下文唯一、刚在接同一条最新消息）不要引用，别让对方猜，也别为了用工具而用。',
+  '统一发送工具：一次调用 = 一次完整回复。messages 可传一条或多条文字，stickerId 可选追加一张表情（QQ 收藏，或仅私聊可用的外部梗图 ext:…；表情会作为最后一条独立气泡发出）。桥接按真人节奏逐条发送，整次回复只进入一次冷却（文字、图片、表情共用同一个会话冷却，以接口返回的剩余秒数为准）。因此不要把“多条文字”或“文字+表情”拆成多次工具调用，否则第二次会撞冷却。字符串=一条消息，数组=多条消息；每个字符串内部不要用空格分隔中文短句，需要多条请用数组元素；每条消息要读起来完整，不要把同一句话拆到两条里。只有以下情况才需要传 replyToMessageId 引用：① 你这条消息指向的人或消息并非最新一条别人的消息（也就是你在回更早的某条）；② 你连续几句话里不同消息指代的是不同的消息或不同的人。其他情况（上下文唯一、刚在接同一条最新消息）不要引用，别让对方猜，也别为了用工具而用。',
   {
     key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
     token: z.string().describe('会话令牌（见唤醒提示中的【会话令牌】）'),
     messages: z.union([z.string(), z.array(z.string()).min(1)]).describe('要发送的内容：字符串=一条；数组=分多条'),
-    stickerId: z.string().optional().describe('可选：在最后一条文字后追加一张收藏表情（qq_list_stickers 的 id / md5 / url）。表情会作为下一条独立气泡发出，整次回复仍只计一次冷却'),
+    stickerId: z.string().optional().describe('可选：在最后一条文字后追加一张表情（qq_list_stickers 的 id / md5 / url，或私聊的 ext: 外部梗图）。表情作为下一条独立气泡发出，整次回复仍只计一次冷却'),
+    stickerAuto: z.boolean().optional().describe('这张表情是不是你主动想配的（不是对方点名要）。主动配图会受每会话频率/去重限制；对方明确要图时传 false'),
     replyToMessageId: z.union([z.number(), z.string()]).optional().describe('要引用/回复的消息 id（非零整数，可为负数，可选）'),
     atUserId: z.union([z.number(), z.string()]).optional().describe('要 @ 的群成员 QQ 号（群聊中用于点名某个人；与引用二选一即可，不要滥用）'),
     gapMode: z.enum(['auto', 'fixed', 'byLength']).optional().describe('auto=桥接随机；fixed=固定间隔；byLength=按字数计算'),
     gapMs: z.number().optional().describe('fixed 模式下的统一间隔（毫秒）'),
     gaps: z.array(z.number()).optional().describe('fixed 模式下逐条间隔（长度=条数-1）')
   },
-  async ({ key, token, messages, stickerId, replyToMessageId, atUserId, gapMode, gapMs, gaps }) => {
+  async ({ key, token, messages, stickerId, stickerAuto, replyToMessageId, atUserId, gapMode, gapMs, gaps }) => {
     try {
       let finalMessages = messages;
       if (typeof finalMessages === 'string') {
@@ -746,13 +767,13 @@ server.tool(
       }
       const data = await agentApi('/api/socialV2/send-message', {
         method: 'POST',
-        body: JSON.stringify({ key, messages: finalMessages, stickerId: stickerId ? String(stickerId) : undefined, replyToMessageId, atUserId: atUserId ?? null, gapMode, gapMs, gaps }),
+        body: JSON.stringify({ key, messages: finalMessages, stickerId: stickerId ? String(stickerId) : undefined, stickerAuto: stickerAuto === true, replyToMessageId, atUserId: atUserId ?? null, gapMode, gapMs, gaps }),
         headers: { 'x-agent-token': token },
         timeoutMs: 300000
       });
       return { content: [{ type: 'text', text: serializeModelData(data) }] };
     } catch (error) {
-      return { content: [{ type: 'text', text: `发送失败：${error?.message ?? error}` }], isError: true };
+      return { content: [{ type: 'text', text: agentSendErrorText(error, '发送失败') }], isError: true };
     }
   }
 );
@@ -1432,15 +1453,18 @@ if (cfg.socialV2?.tools?.getImages !== false) {
 if (cfg.socialV2?.sticker?.enabled !== false && cfg.socialV2?.tools?.listStickers !== false) {
   server.tool(
     'qq_list_stickers',
-    '查看 QQ 账号上已收藏的表情包（自定义表情）列表：包含 emoji_id、备注 desc、本地笔记 localNote、标签 tags、使用次数等。可通过 query 按备注/笔记/标签搜索；无备注的表情可以先调用 qq_get_sticker_image 看图理解，再用 qq_sticker_note 记下含义。刚新增/删除表情后如需立即同步，请传 refresh=true。',
+    '查看可用表情库：QQ 账号上的收藏表情（备注 desc、本地笔记 localNote、标签 tags、使用次数）+（仅私聊）外部梗图库。可传 query 按备注/笔记/标签/梗图文案搜索；无备注的 QQ 表情可先用 qq_get_sticker_image 看图理解，再用 qq_sticker_note 记含义。刚新增/删除收藏表情后如需立即同步，请传 refresh=true。外部梗图 id 形如 ext:xxxxxxxxxxxx，只在私聊出现；群聊只返回 QQ 收藏。',
     {
       key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
       token: z.string().describe('会话令牌（见唤醒提示中的【会话令牌】）'),
-      query: z.string().optional().describe('可选搜索词，按备注/本地笔记/标签/用法过滤'),
-      count: z.number().optional().describe('最多返回条数，默认 48，受 socialV2.sticker.maxListCount 配置上限约束（当前通常 100）'),
+      query: z.string().optional().describe('可选搜索词，按备注/本地笔记/标签/用法/外部梗图文案过滤'),
+      emotion: z.string().optional().describe('可选情绪，如 安慰/开心/无语/生气/可爱/讨饭；外部梗图会按情绪排序'),
+      character: z.string().optional().describe('可选角色，如 DeepSeek娘/AI娘化/Claude娘；外部梗图按角色加权，不硬过滤'),
+      source: z.enum(['all', 'qq', 'ext']).optional().describe('all=QQ+外部（默认，外部仅私聊）；qq=只看收藏；ext=只看外部梗图'),
+      count: z.number().optional().describe('最多返回条数，默认 48，受 socialV2.sticker.maxListCount 配置上限约束'),
       refresh: z.boolean().optional().describe('是否强制从 QQ 重新同步收藏表情，默认 false（走缓存）')
     },
-    async ({ key, token, query, count, refresh }) => {
+    async ({ key, token, query, count, refresh, source, emotion, character }) => {
       try {
         // 强制同步走 POST：GET 上的 refresh 参数会让「读接口」产生写副作用
         // （真的去问 OneBot 拉收藏表情并落盘 state/stickers.json），
@@ -1448,7 +1472,16 @@ if (cfg.socialV2?.sticker?.enabled !== false && cfg.socialV2?.tools?.listSticker
         const data = await agentApi('/api/socialV2/sticker-list', {
           method: 'POST',
           headers: { 'x-agent-token': token },
-          body: JSON.stringify({ key, query: query ? String(query) : '', count, refresh: refresh === true, token })
+          body: JSON.stringify({
+            key,
+            query: query ? String(query) : '',
+            count,
+            refresh: refresh === true,
+            source: source || 'all',
+            emotion: emotion || '',
+            character: character || '',
+            token
+          })
         });
         return { content: [{ type: 'text', text: serializeModelData(data) }] };
       } catch (error) {
@@ -1461,11 +1494,11 @@ if (cfg.socialV2?.sticker?.enabled !== false && cfg.socialV2?.tools?.listSticker
 if (cfg.socialV2?.sticker?.enabled !== false && cfg.socialV2?.tools?.getStickerImage !== false) {
   server.tool(
     'qq_get_sticker_image',
-    '获取指定收藏表情的图片内容并直接以图像返回给模型（视觉模型可“看懂”）。当 qq_list_stickers 返回的表情 desc/localNote 为空、或你想确认表情实际长什么样时调用。stickerId 可用 qq_list_stickers 返回的 id / md5 / url。',
+    '获取指定表情的图片内容并直接以图像返回给模型（视觉模型可“看懂”）。当 qq_list_stickers 返回的表情 desc/localNote 为空、或你想确认表情实际长什么样时调用。stickerId 可用 qq_list_stickers 返回的 QQ 收藏 id / md5 / url，或私聊的外部梗图 ext:xxxxxxxxxxxx。',
     {
       key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
       token: z.string().describe('会话令牌（见唤醒提示中的【会话令牌】）'),
-      stickerId: z.string().describe('表情标识：emoji_id / md5 / 图片 URL（来自 qq_list_stickers）')
+      stickerId: z.string().describe('表情标识：QQ 收藏的 emoji_id / md5 / 图片 URL，或私聊的外部梗图 ext:xxxxxxxxxxxx（来自 qq_list_stickers）')
     },
     async ({ key, token, stickerId }) => {
       try {
@@ -1489,25 +1522,26 @@ if (cfg.socialV2?.sticker?.enabled !== false && cfg.socialV2?.tools?.getStickerI
 if (cfg.socialV2?.sticker?.enabled !== false && cfg.socialV2?.tools?.sendSticker !== false) {
   server.tool(
     'qq_send_sticker',
-    '在指定会话单独发一张 QQ 收藏表情包（自定义表情）。stickerId 用 qq_list_stickers 返回的 id / md5 / url。注意：一条消息只能是一张表情，不能在同一气泡里附带文字；如果既想说话又想配表情，优先用 qq_send_message 的 messages 数组 + stickerId，一次把文字和表情发完，整次回复只计一次冷却。文字已经发出去才想补一张时，也可以再单独调 qq_send_sticker：表情/图片/文字各自独立冷却（默认私聊 30 秒、群聊 2 分钟），文字刚发过不影响这一张，但别连续刷。需要引用/点名时可用 replyToMessageId / atUserId（群聊）。真人偶尔用表情包很自然，但别刷屏。',
+    '在指定会话单独发一张表情：stickerId 可以是 qq_list_stickers 返回的 QQ 收藏 id / md5 / url，也可以是仅私聊可用的外部梗图 ext:xxxxxxxxxxxx。注意：一条消息只能是一张表情，不能在同一气泡里附带文字；如果既想说话又想配表情，优先用 qq_send_message 的 messages 数组 + stickerId，一次把文字和表情发完。文字、图片、表情共用同一个会话冷却——文字刚发过再单独发表情会撞冷却，不要把它当成独立额度；别连续刷。需要引用/点名时可用 replyToMessageId / atUserId（群聊；外部梗图不支持 @）。真人偶尔用表情包很自然。',
     {
       key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
       token: z.string().describe('会话令牌（见唤醒提示中的【会话令牌】）'),
-      stickerId: z.string().describe('表情标识：emoji_id / md5 / 图片 URL（来自 qq_list_stickers）'),
+      stickerId: z.string().describe('表情标识：QQ 收藏的 emoji_id / md5 / 图片 URL，或私聊的外部梗图 ext:xxxxxxxxxxxx（来自 qq_list_stickers）'),
+      stickerAuto: z.boolean().optional().describe('这张表情是不是你主动想发的（不是对方点名要）。主动配图会受每会话频率/去重限制；对方明确要图时传 false'),
       replyToMessageId: z.union([z.number(), z.string()]).optional().describe('要引用/回复的消息 id（非零整数，可为负数，可选）'),
-      atUserId: z.union([z.number(), z.string()]).optional().describe('要 @ 的群成员 QQ 号（群聊中可选，私聊不可用）')
+      atUserId: z.union([z.number(), z.string()]).optional().describe('要 @ 的群成员 QQ 号（群聊中可选，私聊不可用；外部梗图不支持 @）')
     },
-    async ({ key, token, stickerId, replyToMessageId, atUserId }) => {
+    async ({ key, token, stickerId, stickerAuto, replyToMessageId, atUserId }) => {
       try {
         const data = await agentApi('/api/socialV2/send-sticker', {
           method: 'POST',
-          body: JSON.stringify({ key, stickerId: String(stickerId), replyToMessageId, atUserId: atUserId ?? null }),
+          body: JSON.stringify({ key, stickerId: String(stickerId), stickerAuto: stickerAuto === true, replyToMessageId, atUserId: atUserId ?? null }),
           headers: { 'x-agent-token': token },
           timeoutMs: 300000
         });
         return { content: [{ type: 'text', text: serializeModelData(data) }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `发送表情失败：${error?.message ?? error}` }], isError: true };
+        return { content: [{ type: 'text', text: agentSendErrorText(error, '发送表情失败') }], isError: true };
       }
     }
   );
@@ -1516,24 +1550,48 @@ if (cfg.socialV2?.sticker?.enabled !== false && cfg.socialV2?.tools?.sendSticker
 if (cfg.socialV2?.sticker?.enabled !== false && cfg.socialV2?.tools?.collectSticker !== false) {
   server.tool(
     'qq_collect_sticker',
-    '收藏当前会话里别人发的一张表情/图片到你的 QQ 收藏表情，并可写一句简短备注（如“好图偷了，兄弟”）。messageId 用 qq_get_unread_messages / qq_get_recent_messages 返回的 messageId 或 seq。注意：不要频繁收藏，只在真的觉得有意思/好用/戳中你时才偷图；收藏后你可以在 qq_list_stickers 里看到并继续使用。',
+    '收藏当前会话里别人发的一张表情/图片到你的 QQ 收藏表情，并写一句简短备注/品味笔记。messageId 用 qq_get_unread_messages / qq_get_recent_messages 返回的 messageId 或 seq。remark 是给这张图看的备注（最多 20 字，会进表情库）；note 是为什么想收、哪里好（最多 120 字，会进你的「表情品味」画像，帮助下一次选图）。注意：不要频繁收藏，只在真的觉得有意思/好用/戳中你时才偷图；收藏后你可以在 qq_list_stickers 里看到并继续使用。',
     {
       key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
       token: z.string().describe('会话令牌（见唤醒提示中的【会话令牌】）'),
       messageId: z.string().describe('要收藏的那条消息的 messageId 或 seq（来自 qq_get_unread_messages / qq_get_recent_messages）'),
-      remark: z.string().optional().describe('简短备注，最多 20 字，例如“好图偷了，兄弟”')
+      remark: z.string().optional().describe('给这张图的备注，最多 20 字，例如“好图偷了，兄弟”'),
+      note: z.string().optional().describe('品味笔记：为什么想收/哪里好，最多 120 字；会写进表情品味画像')
     },
-    async ({ key, token, messageId, remark }) => {
+    async ({ key, token, messageId, remark, note }) => {
       try {
         const data = await agentApi('/api/socialV2/collect-sticker', {
           method: 'POST',
-          body: JSON.stringify({ key, messageId: String(messageId), remark: remark || '' }),
+          body: JSON.stringify({ key, messageId: String(messageId), remark: remark || '', note: note || '' }),
           headers: { 'x-agent-token': token },
           timeoutMs: 60000
         });
         return { content: [{ type: 'text', text: serializeModelData(data) }] };
       } catch (error) {
         return { content: [{ type: 'text', text: `收藏表情失败：${error?.message ?? error}` }], isError: true };
+      }
+    }
+  );
+}
+
+if (cfg.socialV2?.sticker?.enabled !== false && cfg.socialV2?.tools?.stickerTaste !== false) {
+  server.tool(
+    'qq_sticker_taste',
+    '查看你的「表情品味」画像：你喜欢什么、不喜欢什么、收藏过哪些图、最近写下的品味笔记，以及今天还能收藏几张。想挑图/偷图前不确定自己的偏好时看一眼；不要把它当成人设朗读给用户。',
+    {
+      key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
+      token: z.string().describe('会话令牌（见唤醒提示中的【会话令牌】）')
+    },
+    async ({ key, token }) => {
+      try {
+        const q = new URLSearchParams({ key: String(key) });
+        const data = await agentApi(`/api/socialV2/sticker-taste?${q.toString()}`, {
+          headers: { 'x-agent-token': token },
+          timeoutMs: 30000
+        });
+        return { content: [{ type: 'text', text: serializeModelData(data) }] };
+      } catch (error) {
+        return { content: [{ type: 'text', text: `获取表情品味失败：${error?.message ?? error}` }], isError: true };
       }
     }
   );
